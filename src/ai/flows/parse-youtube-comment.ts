@@ -8,7 +8,7 @@
  */
 
 import {ai} from '@/ai/ai-instance';
-import {YouTubeComment, getComment, getVideoComments} from '@/services/youtube';
+import {YouTubeComment, getVideoComments} from '@/services/youtube';
 import {z} from 'genkit';
 
 const ParseYouTubeCommentInputSchema = z.object({
@@ -114,7 +114,7 @@ const parseYouTubeCommentFlow = ai.defineFlow<
       }
     } else {
       // It's a comment URL
-      const comment = await getComment(input.youtubeUrl);
+      const comment = await getVideoComments(input.youtubeUrl);
       comments = [comment];
     }
 
