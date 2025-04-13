@@ -1,16 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Song } from "@/services/spotify";
-import { authenticateSpotify, searchSong, createPlaylist } from "@/services/spotify";
+// Removed: import { Song } from "@/services/spotify";
+// Removed: import { authenticateSpotify, searchSong, createPlaylist } from "@/services/spotify";
 import { useToast } from "@/hooks/use-toast";
 import { Icons } from "@/components/icons";
-import { parseYouTubeComment } from "@/ai/flows/parse-youtube-comment";
+import { parseYouTubeComment, ParseYouTubeCommentOutput } from "@/ai/flows/parse-youtube-comment";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+
+// Define Song type locally or in a shared types file if needed elsewhere
+type Song = {
+  title: string;
+  artist: string;
+};
 
 const youtubeIcon = (
   <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 mr-2">
@@ -28,63 +34,55 @@ export default function Home() {
   const [youtubeLink, setYoutubeLink] = useState("");
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(false);
-  const [spotifyUserId, setSpotifyUserId] = useState("");
+  const [spotifyUserId, setSpotifyUserId] = useState(""); // Still needed for playlist creation endpoint
   const [prioritizePinned, setPrioritizePinned] = useState(false);
   const { toast } = useToast();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // NOTE: True user authentication (Authorization Code Flow) is needed for playlist creation.
+  // This state now just tracks if the user *attempted* an action requiring Spotify.
+  const [spotifyReady, setSpotifyReady] = useState(true); // Assume ready for basic search initially
   const [parsingState, setParsingState] = useState<string | null>(null);
   const [canCreatePlaylist, setCanCreatePlaylist] = useState(false);
 
-  const handleSpotifyAuth = async () => {
-    setLoading(true);
-    try {
-      await authenticateSpotify();
-      setIsAuthenticated(true);
-      toast({
-        title: "Spotify Authenticated",
-        description: "Successfully authenticated with Spotify.",
-      });
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Spotify Authentication Error",
-        description: error.message || "Failed to authenticate with Spotify.",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Placeholder for Spotify Auth - Real auth needed for playlist creation
+  // The backend uses Client Credentials, which is server-to-server.
+  // If user-specific actions are needed, implement Authorization Code Flow.
+  useEffect(() => {
+    console.warn('Spotify Authentication: Using backend Client Credentials. Playlist creation requires user authorization (Authorization Code Flow).');
+  }, []);
 
   const handleParseComments = async () => {
-    if (!isAuthenticated) {
-      toast({
-        variant: "destructive",
-        title: "Authentication Required",
-        description: "Please authenticate with Spotify before parsing comments.",
-      });
-      return;
+    if (!youtubeLink) {
+       toast({ title: "Input Missing", description: "Please enter a YouTube URL.", variant: "destructive" });
+       return;
     }
-
     setLoading(true);
-    setParsingState("Fetching comments from YouTube...");
+    setParsingState("Fetching and parsing comments from YouTube...");
+    setSongs([]); // Clear previous songs
+    setCanCreatePlaylist(false);
     try {
-      const result = await parseYouTubeComment({ youtubeUrl: youtubeLink, prioritizePinnedComments: prioritizePinned });
+      // Call the AI flow which now uses the backend /api/youtube route
+      const result: ParseYouTubeCommentOutput = await parseYouTubeComment({
+        youtubeUrl: youtubeLink,
+        prioritizePinnedComments: prioritizePinned
+      });
       setSongs(result.songs);
-      setParsingState("Successfully parsed songs from the comments.");
+      setParsingState(`Found ${result.songs.length} potential songs.`);
       toast({
         title: "Songs Parsed",
         description: `Successfully parsed ${result.songs.length} songs from the comments.`,
       });
-      setCanCreatePlaylist(true); // Enable the "Create Playlist" button
+      if (result.songs.length > 0) {
+        setCanCreatePlaylist(true); // Enable the "Create Playlist" section
+      }
     } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Parsing Error",
         description: error.message || "Failed to parse comments.",
       });
+      setParsingState(null);
     } finally {
       setLoading(false);
-      setParsingState(null);
     }
   };
 
@@ -92,7 +90,7 @@ export default function Home() {
     if (!spotifyUserId) {
       toast({
         variant: "destructive",
-        title: "Spotify Error",
+        title: "Spotify User ID Required",
         description: "Please enter your Spotify User ID.",
       });
       return;
@@ -101,32 +99,88 @@ export default function Home() {
     if (songs.length === 0) {
       toast({
         variant: "destructive",
-        title: "Playlist Error",
-        description: "No songs to add to the playlist.",
+        title: "No Songs",
+        description: "No songs found to add to the playlist.",
       });
       return;
     }
 
     setLoading(true);
     setParsingState("Searching for songs on Spotify...");
+
     try {
-      const trackIds = await Promise.all(songs.map(async (song) => {
-        const trackId = await searchSong(song);
-        return trackId;
-      }));
+      const trackUris: string[] = [];
+      for (const song of songs) {
+        try {
+          const searchQuery = `${song.title} ${song.artist}`;
+          const response = await fetch('/api/spotify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'search', query: searchQuery, type: 'track' }),
+          });
 
-      setParsingState("Creating playlist on Spotify...");
-      const playlistId = await createPlaylist(spotifyUserId, "TuneFlow Playlist", trackIds);
+          if (!response.ok) {
+            const errorData = await response.json();
+            console.warn(`Spotify search failed for "${searchQuery}": ${errorData.error?.message || response.statusText}`);
+            continue; // Skip this song if search fails
+          }
 
-      toast({
-        title: "Playlist Created",
-        description: `Playlist successfully created with ID: ${playlistId}`,
+          const data = await response.json();
+          const track = data?.tracks?.items?.[0];
+          if (track?.uri) {
+            trackUris.push(track.uri);
+          } else {
+             console.warn(`No Spotify track found for "${searchQuery}"`);
+          }
+        } catch (searchError: any) {
+           console.error(`Error searching for song "${song.title}":`, searchError);
+        }
+      }
+
+       if (trackUris.length === 0) {
+           throw new Error("Could not find any of the songs on Spotify.");
+       }
+
+      setParsingState(`Found ${trackUris.length} songs on Spotify. Creating playlist...`);
+
+      const playlistName = `YouTube Flow: ${new URL(youtubeLink).searchParams.get('v') || 'Playlist'}`;
+      const createResponse = await fetch('/api/spotify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_playlist',
+          userId: spotifyUserId,
+          playlistName: playlistName,
+          trackUris: trackUris,
+        }),
       });
+
+      const createData = await createResponse.json();
+
+      if (!createResponse.ok) {
+         // Handle specific backend warnings vs errors
+         if (createData.warning) {
+            toast({
+                title: "Playlist Created (with issues)",
+                description: createData.warning,
+                variant: "default", // Use default variant for warnings
+            });
+         } else {
+            throw new Error(createData.error || `Failed to create playlist (${createResponse.status})`);
+         }
+      } else {
+          toast({
+            title: "Playlist Created Successfully",
+            description: `Playlist created on Spotify with ${trackUris.length} tracks. ID: ${createData.playlistId}`,
+          });
+      }
+
     } catch (error: any) {
+      console.error("Playlist Creation Error:", error);
       toast({
         variant: "destructive",
         title: "Playlist Creation Error",
-        description: error.message || "Failed to create playlist.",
+        description: error.message || "An unexpected error occurred.",
       });
     } finally {
       setLoading(false);
@@ -141,36 +195,18 @@ export default function Home() {
           <CardTitle className="text-lg font-semibold">TuneFlow</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {!isAuthenticated && (
-            <Button
-              onClick={handleSpotifyAuth}
-              disabled={loading}
-              className="w-full rounded-md"
-            >
-              {loading ? (
-                <>
-                  <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                  Authenticating...
-                </>
-              ) : (
-                <>
-                  {spotifyIcon}
-                  Authenticate with Spotify
-                </>
-              )}
-            </Button>
-          )}
+           {/* Removed Auth Button - Auth is handled backend or needs full user flow */}
 
-          {isAuthenticated && (
-            <>
+           {/* YouTube Input Section */}
+           <div className="space-y-2">
               <div className="flex items-center space-x-2">
                 {youtubeIcon}
-                <Label htmlFor="youtube-link">YouTube Link</Label>
+                <Label htmlFor="youtube-link">YouTube Video Link</Label>
               </div>
               <Input
                 id="youtube-link"
                 type="url"
-                placeholder="Enter YouTube Video or Comment URL"
+                placeholder="Enter YouTube Video URL (e.g., ...watch?v=...)"
                 value={youtubeLink}
                 onChange={(e) => setYoutubeLink(e.target.value)}
                 className="rounded-md"
@@ -179,31 +215,35 @@ export default function Home() {
                 <Checkbox
                   id="prioritize-pinned"
                   checked={prioritizePinned}
-                  onCheckedChange={(checked) => setPrioritizePinned(checked || false)}
+                  onCheckedChange={(checked) => setPrioritizePinned(Boolean(checked))}
                 />
-                <Label htmlFor="prioritize-pinned" className="text-sm">
-                  Prioritize Pinned Comments
+                <Label htmlFor="prioritize-pinned" className="text-sm text-muted-foreground">
+                  Prioritize Pinned Comments (if available)
                 </Label>
               </div>
               <Button
                 onClick={handleParseComments}
-                disabled={loading}
+                disabled={loading || !youtubeLink}
                 className="w-full rounded-md"
               >
-                {loading ? (
+                {loading && parsingState?.includes('YouTube') ? (
                   <>
                     <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
                     {parsingState}
                   </>
                 ) : (
-                  "Parse Comments"
+                  "Parse YouTube Comments"
                 )}
               </Button>
-            </>
-          )}
+            </div>
 
-          {isAuthenticated && canCreatePlaylist && (
-            <>
+            {/* Spotify Playlist Creation Section - Enabled after successful parsing */}
+            {canCreatePlaylist && (
+            <div className="space-y-2 pt-4 border-t">
+               <p className="text-sm text-muted-foreground">
+                  Warning: Playlist creation requires Spotify User authorization. The current setup might fail.
+                  Please ensure your backend has the necessary permissions if using user-specific actions.
+               </p>
               <div className="flex items-center space-x-2">
                 {spotifyIcon}
                 <Label htmlFor="spotify-user-id">Spotify User ID</Label>
@@ -211,17 +251,17 @@ export default function Home() {
               <Input
                 id="spotify-user-id"
                 type="text"
-                placeholder="Enter Spotify User ID"
+                placeholder="Enter Your Spotify User ID"
                 value={spotifyUserId}
                 onChange={(e) => setSpotifyUserId(e.target.value)}
                 className="rounded-md"
               />
               <Button
                 onClick={handleCreatePlaylist}
-                disabled={loading || songs.length === 0}
-                className="w-full rounded-md bg-accent text-foreground hover:bg-accent-foreground hover:text-background"
+                disabled={loading || songs.length === 0 || !spotifyUserId}
+                className="w-full rounded-md bg-green-600 text-white hover:bg-green-700"
               >
-                {loading ? (
+                {loading && parsingState?.includes('Spotify') ? (
                   <>
                     <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
                     {parsingState}
@@ -230,21 +270,22 @@ export default function Home() {
                   "Create Spotify Playlist"
                 )}
               </Button>
-            </>
+            </div>
           )}
         </CardContent>
       </Card>
 
+      {/* Display Parsed Songs */}
       {songs.length > 0 && (
         <Card className="w-full max-w-md mt-4 p-4 rounded-lg shadow-md bg-secondary">
           <CardHeader>
-            <CardTitle className="text-lg font-semibold">Parsed Songs</CardTitle>
+            <CardTitle className="text-lg font-semibold">Parsed Songs ({songs.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2">
+            <ul className="space-y-2 max-h-60 overflow-y-auto">
               {songs.map((song, index) => (
-                <li key={index} className="text-sm">
-                  {song.title} - {song.artist}
+                <li key={index} className="text-sm border-b pb-1">
+                  {song.title} - <span className="text-muted-foreground">{song.artist}</span>
                 </li>
               ))}
             </ul>
@@ -254,3 +295,4 @@ export default function Home() {
     </div>
   );
 }
+
