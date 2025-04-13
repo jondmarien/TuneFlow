@@ -1,7 +1,8 @@
 import type {Metadata} from 'next';
 import {Geist, Geist_Mono} from 'next/font/google';
 import './globals.css';
-import { Toaster } from "@/components/ui/toaster"; // Import Toaster
+import { Toaster } from "@/components/ui/toaster"; 
+import { DarkReaderFixWrapper } from '@/components/DarkReaderFixWrapper';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -14,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'TuneFlow App', // Updated title
-  description: 'Parse YouTube comments for songs and create Spotify playlists', // Updated description
+  title: 'TuneFlow App', 
+  description: 'Parse YouTube comments for songs and create Spotify playlists', 
 };
 
 export default function RootLayout({
@@ -24,10 +25,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="system">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <DarkReaderFixWrapper />
         {children}
-        <Toaster /> {/* Add Toaster here */}
+        <Toaster /> 
       </body>
     </html>
   );
