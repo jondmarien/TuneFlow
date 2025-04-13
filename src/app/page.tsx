@@ -31,16 +31,51 @@ export default function Home() {
   const [spotifyUserId, setSpotifyUserId] = useState("");
   const [prioritizePinned, setPrioritizePinned] = useState(false);
   const { toast } = useToast();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [parsingState, setParsingState] = useState<string | null>(null);
+  const [canCreatePlaylist, setCanCreatePlaylist] = useState(false);
+
+  const handleSpotifyAuth = async () => {
+    setLoading(true);
+    try {
+      await authenticateSpotify();
+      setIsAuthenticated(true);
+      toast({
+        title: "Spotify Authenticated",
+        description: "Successfully authenticated with Spotify.",
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Spotify Authentication Error",
+        description: error.message || "Failed to authenticate with Spotify.",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleParseComments = async () => {
+    if (!isAuthenticated) {
+      toast({
+        variant: "destructive",
+        title: "Authentication Required",
+        description: "Please authenticate with Spotify before parsing comments.",
+      });
+      return;
+    }
+
     setLoading(true);
+    setParsingState("Fetching comments from YouTube...");
     try {
       const result = await parseYouTubeComment({ youtubeUrl: youtubeLink, prioritizePinnedComments: prioritizePinned });
       setSongs(result.songs);
+      setParsingState("Successfully parsed songs from the comments.");
       toast({
         title: "Songs Parsed",
         description: `Successfully parsed ${result.songs.length} songs from the comments.`,
       });
+      setCanCreatePlaylist(true); // Enable the "Create Playlist" button
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -49,6 +84,7 @@ export default function Home() {
       });
     } finally {
       setLoading(false);
+      setParsingState(null);
     }
   };
 
@@ -72,13 +108,14 @@ export default function Home() {
     }
 
     setLoading(true);
+    setParsingState("Searching for songs on Spotify...");
     try {
-      await authenticateSpotify();
       const trackIds = await Promise.all(songs.map(async (song) => {
         const trackId = await searchSong(song);
         return trackId;
       }));
 
+      setParsingState("Creating playlist on Spotify...");
       const playlistId = await createPlaylist(spotifyUserId, "TuneFlow Playlist", trackIds);
 
       toast({
@@ -93,6 +130,7 @@ export default function Home() {
       });
     } finally {
       setLoading(false);
+      setParsingState(null);
     }
   };
 
@@ -103,69 +141,97 @@ export default function Home() {
           <CardTitle className="text-lg font-semibold">TuneFlow</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center space-x-2">
-            {youtubeIcon}
-            <Label htmlFor="youtube-link">YouTube Link</Label>
-          </div>
-          <Input
-            id="youtube-link"
-            type="url"
-            placeholder="Enter YouTube Video or Comment URL"
-            value={youtubeLink}
-            onChange={(e) => setYoutubeLink(e.target.value)}
-            className="rounded-md"
-          />
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="prioritize-pinned"
-              checked={prioritizePinned}
-              onCheckedChange={(checked) => setPrioritizePinned(checked || false)}
-            />
-            <Label htmlFor="prioritize-pinned" className="text-sm">
-              Prioritize Pinned Comments
-            </Label>
-          </div>
-          <Button
-            onClick={handleParseComments}
-            disabled={loading}
-            className="w-full rounded-md"
-          >
-            {loading ? (
-              <>
-                <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                Parsing Comments...
-              </>
-            ) : (
-              "Parse Comments"
-            )}
-          </Button>
+          {!isAuthenticated && (
+            <Button
+              onClick={handleSpotifyAuth}
+              disabled={loading}
+              className="w-full rounded-md"
+            >
+              {loading ? (
+                <>
+                  <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
+                  Authenticating...
+                </>
+              ) : (
+                <>
+                  {spotifyIcon}
+                  Authenticate with Spotify
+                </>
+              )}
+            </Button>
+          )}
 
-          <div className="flex items-center space-x-2">
-            {spotifyIcon}
-            <Label htmlFor="spotify-user-id">Spotify User ID</Label>
-          </div>
-          <Input
-            id="spotify-user-id"
-            type="text"
-            placeholder="Enter Spotify User ID"
-            value={spotifyUserId}
-            onChange={(e) => setSpotifyUserId(e.target.value)}
-            className="rounded-md"
-          />
-          <Button
-            onClick={handleCreatePlaylist}
-            disabled={loading || songs.length === 0}
-            className="w-full rounded-md bg-accent text-foreground hover:bg-accent-foreground hover:text-background"
-          >
-            {loading ? (
-              <>
-                <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                Creating Playlist...
-              </>
-            ) : (
-              "Create Spotify Playlist"
-            )}
-          </Button>
+          {isAuthenticated && (
+            <>
+              <div className="flex items-center space-x-2">
+                {youtubeIcon}
+                <Label htmlFor="youtube-link">YouTube Link</Label>
+              </div>
+              <Input
+                id="youtube-link"
+                type="url"
+                placeholder="Enter YouTube Video or Comment URL"
+                value={youtubeLink}
+                onChange={(e) => setYoutubeLink(e.target.value)}
+                className="rounded-md"
+              />
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="prioritize-pinned"
+                  checked={prioritizePinned}
+                  onCheckedChange={(checked) => setPrioritizePinned(checked || false)}
+                />
+                <Label htmlFor="prioritize-pinned" className="text-sm">
+                  Prioritize Pinned Comments
+                </Label>
+              </div>
+              <Button
+                onClick={handleParseComments}
+                disabled={loading}
+                className="w-full rounded-md"
+              >
+                {loading ? (
+                  <>
+                    <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
+                    {parsingState}
+                  </>
+                ) : (
+                  "Parse Comments"
+                )}
+              </Button>
+            </>
+          )}
+
+          {isAuthenticated && canCreatePlaylist && (
+            <>
+              <div className="flex items-center space-x-2">
+                {spotifyIcon}
+                <Label htmlFor="spotify-user-id">Spotify User ID</Label>
+              </div>
+              <Input
+                id="spotify-user-id"
+                type="text"
+                placeholder="Enter Spotify User ID"
+                value={spotifyUserId}
+                onChange={(e) => setSpotifyUserId(e.target.value)}
+                className="rounded-md"
+              />
+              <Button
+                onClick={handleCreatePlaylist}
+                disabled={loading || songs.length === 0}
+                className="w-full rounded-md bg-accent text-foreground hover:bg-accent-foreground hover:text-background"
+              >
+                {loading ? (
+                  <>
+                    <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
+                    {parsingState}
+                  </>
+                ) : (
+                  "Create Spotify Playlist"
+                )}
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
 
