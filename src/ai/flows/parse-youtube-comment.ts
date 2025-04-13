@@ -8,7 +8,6 @@
  */
 
 import {ai} from '@/ai/ai-instance';
-// Removed: import {YouTubeComment, getVideoComments} from '@/services/youtube';
 import {z} from 'genkit';
 
 // --- Input and Output Schemas (Unchanged) ---
@@ -114,6 +113,13 @@ const parseYouTubeCommentFlow = ai.defineFlow<
   async input => {
     let commentsData: any[] = []; // Store raw comment items from API
 
+    // Construct the absolute URL for the internal API route
+    // Use localhost and port from dev script (9002) for local development.
+    // For production, use an environment variable (e.g., process.env.NEXT_PUBLIC_APP_URL)
+    const internalApiBaseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002';
+    const apiUrl = `${internalApiBaseUrl}/api/youtube`;
+    console.log(`[parseYouTubeCommentFlow] Fetching comments from internal API: ${apiUrl}`);
+
     // Only handle video URLs as per the current API route
     if (input.youtubeUrl.includes('watch?v=')) {
       const videoId = new URL(input.youtubeUrl).searchParams.get('v');
@@ -122,8 +128,9 @@ const parseYouTubeCommentFlow = ai.defineFlow<
       }
 
       try {
-        // Call the backend API route
-        const response = await fetch('/api/youtube', { // Assuming relative path works from server-side flow
+        // Call the backend API route using the absolute URL
+        console.log(`[parseYouTubeCommentFlow] Calling fetch with videoId: ${videoId}`);
+        const response = await fetch(apiUrl, { // Use the absolute URL
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -131,57 +138,71 @@ const parseYouTubeCommentFlow = ai.defineFlow<
           body: JSON.stringify({ videoId }),
         });
 
+        console.log(`[parseYouTubeCommentFlow] Fetch response status: ${response.status}`);
+        const responseBody = await response.text(); // Read body as text first for better debugging
+
         if (!response.ok) {
-          const errorData = await response.json();
-          console.error('Backend API Error fetching comments:', errorData);
-          throw new Error(`Failed to fetch comments via backend: ${response.statusText}`);
+          console.error('[parseYouTubeCommentFlow] Backend API Error fetching comments:', response.status, response.statusText, responseBody);
+          // Try to parse error data if possible
+          let errorDetails = responseBody;
+          try {
+              errorDetails = JSON.parse(responseBody);
+          } catch { /* Ignore if body is not JSON */ }
+          throw new Error(`Failed to fetch comments via backend: ${response.statusText} - ${typeof errorDetails === 'string' ? errorDetails : JSON.stringify(errorDetails)}`);
         }
 
-        const data = await response.json();
+        let data;
+        try {
+            data = JSON.parse(responseBody);
+        } catch (parseError) {
+            console.error('[parseYouTubeCommentFlow] Failed to parse JSON response:', responseBody);
+            throw new Error('Failed to parse response from backend API.');
+        }
+
+        console.log(`[parseYouTubeCommentFlow] Received ${data?.items?.length || 0} comment items from API.`);
         commentsData = data.items || []; // Extract comment items
 
-        // Note: Prioritizing pinned comments might require changes.
-        // The commentThreads endpoint might not return pinned status directly in the default `part=snippet`.
-        // You might need to adjust the API route or the parsing here if pinned status is crucial.
-
       } catch (error) {
-        console.error('Error calling backend API route:', error);
+        console.error('[parseYouTubeCommentFlow] Error calling backend API route or processing response:', error);
         throw new Error(`Error fetching comments: ${error instanceof Error ? error.message : String(error)}`);
       }
     } else {
-        // Removed direct comment URL handling - API route needs videoId
-        console.warn('Input URL is not a standard video URL. Skipping comment fetch.', input.youtubeUrl);
-        // Alternatively, attempt to extract videoId if possible, or throw error:
+        console.warn('[parseYouTubeCommentFlow] Input URL is not a standard video URL. Skipping comment fetch.', input.youtubeUrl);
         throw new Error('Invalid input: Please provide a YouTube video URL (e.g., https://www.youtube.com/watch?v=...).');
     }
 
     const songs: { title: string; artist: string; }[] = [];
 
     // Process comments fetched from the API route
+    console.log(`[parseYouTubeCommentFlow] Processing ${commentsData.length} comment items with AI prompt...`);
     for (const item of commentsData) {
-        // Extract the actual comment text
-        // Structure is item -> snippet -> topLevelComment -> snippet -> textDisplay
         const commentText = item?.snippet?.topLevelComment?.snippet?.textDisplay;
         if (commentText) {
             try {
                  const {output} = await parseCommentPrompt({ commentText });
                  if (output?.songs) {
-                    songs.push(...output.songs);
+                    // Filter out empty/invalid entries from the tool
+                    const validSongs = output.songs.filter(s => s.title && s.artist && s.title !== 'Unknown' && s.artist !== 'Unknown');
+                    if (validSongs.length > 0) {
+                        console.log(`[parseYouTubeCommentFlow] Extracted songs from comment:`, validSongs);
+                        songs.push(...validSongs);
+                    }
                  }
             } catch (promptError) {
-                console.error('Error processing comment with AI prompt:', promptError, 'Comment text:', commentText);
-                // Decide if you want to skip the comment or handle the error differently
+                console.error('[parseYouTubeCommentFlow] Error processing comment with AI prompt:', promptError, 'Comment text:', commentText);
+                // Skip this comment on error
             }
         }
     }
 
-    // Deduplicate songs (simple deduplication based on title and artist)
+    // Deduplicate songs
     const uniqueSongs = songs.filter((song, index, self) =>
         index === self.findIndex((s) => (
             s.title.toLowerCase() === song.title.toLowerCase() &&
             s.artist.toLowerCase() === song.artist.toLowerCase()
         ))
     );
+    console.log(`[parseYouTubeCommentFlow] Returning ${uniqueSongs.length} unique songs.`);
 
     return { songs: uniqueSongs };
   }

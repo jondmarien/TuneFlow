@@ -4,8 +4,6 @@ import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-// Removed: import { Song } from "@/services/spotify";
-// Removed: import { authenticateSpotify, searchSong, createPlaylist } from "@/services/spotify";
 import { useToast } from "@/hooks/use-toast";
 import { Icons } from "@/components/icons";
 import { parseYouTubeComment, ParseYouTubeCommentOutput } from "@/ai/flows/parse-youtube-comment";
@@ -34,116 +32,146 @@ export default function Home() {
   const [youtubeLink, setYoutubeLink] = useState("");
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(false);
-  const [spotifyUserId, setSpotifyUserId] = useState(""); // Still needed for playlist creation endpoint
+  const [spotifyUserId, setSpotifyUserId] = useState("");
   const [prioritizePinned, setPrioritizePinned] = useState(false);
   const { toast } = useToast();
-  // NOTE: True user authentication (Authorization Code Flow) is needed for playlist creation.
-  // This state now just tracks if the user *attempted* an action requiring Spotify.
   const [spotifyReady, setSpotifyReady] = useState(true); // Assume ready for basic search initially
-  const [parsingState, setParsingState] = useState<string | null>(null);
+  const [parsingState, setParsingState] = useState<string | null>(null); // More specific state tracking
   const [canCreatePlaylist, setCanCreatePlaylist] = useState(false);
 
-  // Placeholder for Spotify Auth - Real auth needed for playlist creation
-  // The backend uses Client Credentials, which is server-to-server.
-  // If user-specific actions are needed, implement Authorization Code Flow.
   useEffect(() => {
-    console.warn('Spotify Authentication: Using backend Client Credentials. Playlist creation requires user authorization (Authorization Code Flow).');
+    console.warn('Spotify Auth Note: Using backend Client Credentials. Playlist creation requires user authorization (Authorization Code Flow) and might fail.');
   }, []);
 
   const handleParseComments = async () => {
+    console.log('handleParseComments started');
     if (!youtubeLink) {
-       toast({ title: "Input Missing", description: "Please enter a YouTube URL.", variant: "destructive" });
-       return;
+      console.warn('YouTube link missing');
+      toast({ title: "Input Missing", description: "Please enter a YouTube URL.", variant: "destructive" });
+      return;
     }
+
     setLoading(true);
-    setParsingState("Fetching and parsing comments from YouTube...");
-    setSongs([]); // Clear previous songs
+    setSongs([]);
     setCanCreatePlaylist(false);
+    const parseToast = toast({ title: 'Starting YouTube Comment Parsing...', description: 'Please wait...' });
+    console.log('Initiating YouTube comment parsing...');
+    setParsingState("Fetching & Parsing Comments");
+
     try {
-      // Call the AI flow which now uses the backend /api/youtube route
+      parseToast.update({ id: parseToast.id, title: 'Calling AI Flow...', description: 'Fetching and analyzing comments.' });
+      console.log(`Calling parseYouTubeComment for URL: ${youtubeLink}, prioritizePinned: ${prioritizePinned}`);
+
       const result: ParseYouTubeCommentOutput = await parseYouTubeComment({
         youtubeUrl: youtubeLink,
         prioritizePinnedComments: prioritizePinned
       });
+
+      console.log('parseYouTubeComment finished. Result:', result);
       setSongs(result.songs);
-      setParsingState(`Found ${result.songs.length} potential songs.`);
-      toast({
-        title: "Songs Parsed",
-        description: `Successfully parsed ${result.songs.length} songs from the comments.`,
+
+      parseToast.update({
+        id: parseToast.id,
+        title: "Parsing Complete",
+        description: `Found ${result.songs.length} potential songs. Check the list below.`,
+        variant: "success"
       });
+      console.log(`Successfully parsed ${result.songs.length} songs.`);
+
       if (result.songs.length > 0) {
-        setCanCreatePlaylist(true); // Enable the "Create Playlist" section
+        setCanCreatePlaylist(true);
       }
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Parsing Error",
-        description: error.message || "Failed to parse comments.",
+      console.error('Error during handleParseComments:', error);
+      parseToast.update({
+        id: parseToast.id,
+        title: "Parsing Failed",
+        description: error.message || "An unknown error occurred.",
+        variant: "destructive"
       });
-      setParsingState(null);
     } finally {
+      console.log('handleParseComments finished.');
       setLoading(false);
+      setParsingState(null);
     }
   };
 
   const handleCreatePlaylist = async () => {
+    console.log('handleCreatePlaylist started');
     if (!spotifyUserId) {
-      toast({
-        variant: "destructive",
-        title: "Spotify User ID Required",
-        description: "Please enter your Spotify User ID.",
-      });
+      console.warn('Spotify User ID missing');
+      toast({ title: "Spotify User ID Required", description: "Please enter your Spotify User ID.", variant: "destructive" });
       return;
     }
 
     if (songs.length === 0) {
-      toast({
-        variant: "destructive",
-        title: "No Songs",
-        description: "No songs found to add to the playlist.",
-      });
+      console.warn('No songs available to create playlist');
+      toast({ title: "No Songs", description: "No songs found to add to the playlist.", variant: "destructive" });
       return;
     }
 
     setLoading(true);
-    setParsingState("Searching for songs on Spotify...");
+    const playlistToast = toast({ title: 'Starting Playlist Creation...', description: 'Please wait...' });
+    console.log(`Starting playlist creation for user: ${spotifyUserId} with ${songs.length} potential songs.`);
+    setParsingState("Finding Songs on Spotify");
 
     try {
-      const trackUris: string[] = [];
-      for (const song of songs) {
+      let trackUris: string[] = [];
+      playlistToast.update({ id: playlistToast.id, title: 'Searching Spotify...', description: `Looking for ${songs.length} songs...` });
+      console.log('Searching for song URIs on Spotify...');
+
+      // Sequentially search for songs to avoid overwhelming the API/logs
+      for (let i = 0; i < songs.length; i++) {
+        const song = songs[i];
+        const searchQuery = `${song.title} ${song.artist}`;
+        console.log(`Searching for: "${searchQuery}" (${i + 1}/${songs.length})`);
+        setParsingState(`Searching: ${song.title}`); // Update transient state
+        playlistToast.update({ id: playlistToast.id, title: 'Searching Spotify...', description: `Looking for "${song.title}" (${i + 1}/${songs.length})` });
+
         try {
-          const searchQuery = `${song.title} ${song.artist}`;
           const response = await fetch('/api/spotify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'search', query: searchQuery, type: 'track' }),
           });
 
+          const data = await response.json(); // Read response body once
+
           if (!response.ok) {
-            const errorData = await response.json();
-            console.warn(`Spotify search failed for "${searchQuery}": ${errorData.error?.message || response.statusText}`);
-            continue; // Skip this song if search fails
+             console.warn(`Spotify search failed for "${searchQuery}" (Status: ${response.status}):`, data);
+             toast({ title: `Search Warning`, description: `Could not find "${song.title}" or search failed.`, variant: "default" });
+             continue; // Skip this song
           }
 
-          const data = await response.json();
           const track = data?.tracks?.items?.[0];
           if (track?.uri) {
+            console.log(`Found URI: ${track.uri} for "${searchQuery}"`);
             trackUris.push(track.uri);
           } else {
-             console.warn(`No Spotify track found for "${searchQuery}"`);
+             console.warn(`No track URI found for "${searchQuery}" in response:`, data);
+             toast({ title: `Not Found`, description: `Could not find "${song.title}" on Spotify.`, variant: "default" });
           }
         } catch (searchError: any) {
-           console.error(`Error searching for song "${song.title}":`, searchError);
+           console.error(`Error during fetch/search for song "${song.title}":`, searchError);
+           toast({ title: `Search Error`, description: `Error searching for "${song.title}".`, variant: "destructive" });
         }
       }
 
-       if (trackUris.length === 0) {
-           throw new Error("Could not find any of the songs on Spotify.");
-       }
+      console.log(`Found ${trackUris.length} Spotify track URIs.`);
 
-      setParsingState(`Found ${trackUris.length} songs on Spotify. Creating playlist...`);
+      if (trackUris.length === 0) {
+          throw new Error("Could not find any of the songs on Spotify. Cannot create playlist.");
+      }
 
-      const playlistName = `YouTube Flow: ${new URL(youtubeLink).searchParams.get('v') || 'Playlist'}`;
+      setParsingState(`Creating Playlist`);
+      playlistToast.update({ id: playlistToast.id, title: 'Creating Playlist...', description: `Adding ${trackUris.length} songs...` });
+      console.log(`Attempting to create playlist for user ${spotifyUserId}`);
+
+      let playlistName = `YT Comments: Unknown Video`;
+      try {
+         playlistName = `YT Comments: ${new URL(youtubeLink).searchParams.get('v') || 'Playlist'}`;
+      } catch { /* ignore URL parsing errors for name */ }
+
       const createResponse = await fetch('/api/spotify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -155,34 +183,45 @@ export default function Home() {
         }),
       });
 
-      const createData = await createResponse.json();
+      const createData = await createResponse.json(); // Read body once
+      console.log('Playlist creation response status:', createResponse.status);
+      console.log('Playlist creation response data:', createData);
 
       if (!createResponse.ok) {
-         // Handle specific backend warnings vs errors
+         // Specific warning from backend (e.g., tracks failed but playlist created)
          if (createData.warning) {
-            toast({
+             playlistToast.update({
+                id: playlistToast.id,
                 title: "Playlist Created (with issues)",
                 description: createData.warning,
-                variant: "default", // Use default variant for warnings
-            });
+                variant: "default",
+             });
+             console.warn('Playlist created with issues:', createData.warning);
          } else {
-            throw new Error(createData.error || `Failed to create playlist (${createResponse.status})`);
+            // General error
+            throw new Error(createData.error || `Failed to create playlist (Status: ${createResponse.status})`);
          }
       } else {
-          toast({
-            title: "Playlist Created Successfully",
-            description: `Playlist created on Spotify with ${trackUris.length} tracks. ID: ${createData.playlistId}`,
+          // Success
+          playlistToast.update({
+            id: playlistToast.id,
+            title: "Playlist Created!",
+            description: `Playlist '${playlistName}' created with ${trackUris.length} tracks.`, // Used actual name
+            variant: "success",
           });
+          console.log(`Successfully created playlist ID: ${createData.playlistId}`);
       }
 
     } catch (error: any) {
-      console.error("Playlist Creation Error:", error);
-      toast({
-        variant: "destructive",
-        title: "Playlist Creation Error",
+      console.error("Error during handleCreatePlaylist:", error);
+      playlistToast.update({
+        id: playlistToast.id,
+        title: "Playlist Creation Failed",
         description: error.message || "An unexpected error occurred.",
+        variant: "destructive"
       });
     } finally {
+      console.log('handleCreatePlaylist finished.');
       setLoading(false);
       setParsingState(null);
     }
@@ -195,8 +234,6 @@ export default function Home() {
           <CardTitle className="text-lg font-semibold">TuneFlow</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-           {/* Removed Auth Button - Auth is handled backend or needs full user flow */}
-
            {/* YouTube Input Section */}
            <div className="space-y-2">
               <div className="flex items-center space-x-2">
@@ -210,12 +247,14 @@ export default function Home() {
                 value={youtubeLink}
                 onChange={(e) => setYoutubeLink(e.target.value)}
                 className="rounded-md"
+                disabled={loading}
               />
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="prioritize-pinned"
                   checked={prioritizePinned}
                   onCheckedChange={(checked) => setPrioritizePinned(Boolean(checked))}
+                  disabled={loading}
                 />
                 <Label htmlFor="prioritize-pinned" className="text-sm text-muted-foreground">
                   Prioritize Pinned Comments (if available)
@@ -226,7 +265,7 @@ export default function Home() {
                 disabled={loading || !youtubeLink}
                 className="w-full rounded-md"
               >
-                {loading && parsingState?.includes('YouTube') ? (
+                {loading && parsingState === 'Fetching & Parsing Comments' ? (
                   <>
                     <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
                     {parsingState}
@@ -240,9 +279,8 @@ export default function Home() {
             {/* Spotify Playlist Creation Section - Enabled after successful parsing */}
             {canCreatePlaylist && (
             <div className="space-y-2 pt-4 border-t">
-               <p className="text-sm text-muted-foreground">
-                  Warning: Playlist creation requires Spotify User authorization. The current setup might fail.
-                  Please ensure your backend has the necessary permissions if using user-specific actions.
+               <p className="text-xs text-muted-foreground px-1">
+                  Note: Playlist creation requires Spotify User ID & permissions. The backend uses server-to-server auth which may not be sufficient.
                </p>
               <div className="flex items-center space-x-2">
                 {spotifyIcon}
@@ -255,13 +293,14 @@ export default function Home() {
                 value={spotifyUserId}
                 onChange={(e) => setSpotifyUserId(e.target.value)}
                 className="rounded-md"
+                disabled={loading}
               />
               <Button
                 onClick={handleCreatePlaylist}
                 disabled={loading || songs.length === 0 || !spotifyUserId}
-                className="w-full rounded-md bg-green-600 text-white hover:bg-green-700"
+                className="w-full rounded-md bg-green-600 text-white hover:bg-green-700 disabled:bg-green-800"
               >
-                {loading && parsingState?.includes('Spotify') ? (
+                {loading && (parsingState?.includes('Spotify') || parsingState === 'Finding Songs on Spotify' || parsingState === 'Creating Playlist' || parsingState?.includes('Searching:')) ? (
                   <>
                     <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
                     {parsingState}
@@ -295,4 +334,3 @@ export default function Home() {
     </div>
   );
 }
-
