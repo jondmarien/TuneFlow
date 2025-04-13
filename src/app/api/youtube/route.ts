@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
 
   // Construct the correct API URL for comments
   // Note: YouTube API v3 uses 'commentThreads' endpoint to get top-level comments
-  const youtubeApiUrl = \`https://www.googleapis.com/youtube/v3/commentThreads?key=\${apiKey}&videoId=\${videoId}&part=snippet&maxResults=100&order=relevance\`; // Fetch top 100 relevant comments
+  const youtubeApiUrl = `https://www.googleapis.com/youtube/v3/commentThreads?key=\${apiKey}&videoId=\${videoId}&part=snippet&maxResults=100&order=relevance`; // Fetch top 100 relevant comments
 
   try {
     const response = await fetch(youtubeApiUrl, {
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     // Check if the response status is OK *after* reading the body
     if (!response.ok) {
       console.error('YouTube API Error:', data);
-      return NextResponse.json({ error: \`YouTube API error: \${response.statusText}\`, details: data }, { status: response.status });
+      return NextResponse.json({ error: `YouTube API error: ${response.statusText}`, details: data }, { status: response.status });
     }
 
     // If response is ok, return the data

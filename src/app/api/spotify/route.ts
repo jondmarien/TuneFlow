@@ -15,13 +15,14 @@ async function getSpotifyAccessToken(clientId: string, clientSecret: string) {
     cache: 'no-store' // Ensure fresh token for this simple flow
   });
 
+  const data = await response.json(); // Read body once
+
   if (!response.ok) {
-    const errorData = await response.json();
-    console.error('Spotify Token Error:', errorData);
-    throw new Error('Failed to retrieve Spotify access token');
+    console.error('Spotify Token Error:', data);
+    // Use details from the read body
+    throw new Error(`Failed to retrieve Spotify access token: ${data.error_description || response.statusText}`);
   }
 
-  const data = await response.json();
   return data.access_token;
 }
 
@@ -43,21 +44,24 @@ export async function POST(request: NextRequest) {
     // For user-specific data, you'd use the Authorization Code Flow with refresh tokens.
     const accessToken = await getSpotifyAccessToken(clientId, clientSecret);
 
-    const spotifyApiUrl = \`https://api.spotify.com/v1/search?q=\${encodeURIComponent(query)}&type=\${type}&limit=10\`; // Example: Search endpoint
+    const spotifyApiUrl = `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=${type}&limit=10`; // Example: Search endpoint
 
     const spotifyResponse = await fetch(spotifyApiUrl, {
       headers: {
-        'Authorization': \`Bearer \${accessToken}\`,
+        'Authorization': `Bearer ${accessToken}`,
       },
     });
 
+    // Read the response body once
+    const data = await spotifyResponse.json();
+
+    // Check status after reading
     if (!spotifyResponse.ok) {
-      const errorData = await spotifyResponse.json();
-      console.error('Spotify API Error:', errorData);
-      return NextResponse.json({ error: \`Spotify API error: \${spotifyResponse.statusText}\`, details: errorData }, { status: spotifyResponse.status });
+      console.error('Spotify API Error:', data);
+      return NextResponse.json({ error: `Spotify API error: ${spotifyResponse.statusText}`, details: data }, { status: spotifyResponse.status });
     }
 
-    const data = await spotifyResponse.json();
+    // Return successful data
     return NextResponse.json(data);
 
   } catch (error: any) {
