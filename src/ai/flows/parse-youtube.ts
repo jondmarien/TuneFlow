@@ -215,31 +215,63 @@ const parseYouTubeCommentFlow = ai.defineFlow<
     let aiPromptCount = 0;
     let aiPromptTotalTime = 0;
 
+    // --- Batching and Prompt Length Constants ---
+    const MAX_PROMPT_LENGTH = 2048; // Truncate input text above this length
+    const BATCH_SIZE = 5; // How many comments to batch per AI call
+
     // Process comments with AI prompt
     let allSongs: { title: string; artist: string }[] = [];
-    // Only process comments if prioritizePinnedComments is true
+
+    // --- Step 1 & 2: Batching and Prompt Length Logging ---
+    function logAndTruncate(text: string, label: string): string {
+      const length = text.length;
+      console.log(`[parseYouTubeCommentFlow] ${label} length: ${length} chars`);
+      if (length > MAX_PROMPT_LENGTH) {
+        console.warn(`[parseYouTubeCommentFlow] ${label} exceeds ${MAX_PROMPT_LENGTH} chars. Truncating.`);
+        return text.slice(0, MAX_PROMPT_LENGTH);
+      }
+      return text;
+    }
+
+    // Helper to batch process comments
+    async function processCommentBatch(comments: string[]): Promise<{ title: string; artist: string }[]> {
+      // Concatenate comments for a single prompt, separated by markers
+      const joined = comments.map((c, i) => `Comment ${i + 1}:\n${c}`).join('\n---\n');
+      const truncated = logAndTruncate(joined, `Batch of ${comments.length} comments`);
+      const promptStart = Date.now();
+      let result;
+      try {
+        result = await parseCommentPrompt({ commentText: truncated });
+      } catch (error) {
+        console.error(`[parseYouTubeCommentFlow] Error in batch AI prompt:`, error);
+        return [];
+      }
+      const promptDuration = Date.now() - promptStart;
+      aiPromptCount++;
+      aiPromptTotalTime += promptDuration;
+      console.log(`[parseYouTubeCommentFlow] AI prompt duration for batch: ${promptDuration} ms`);
+      if (result.output?.songs && result.output.songs.length > 0) {
+        return result.output.songs;
+      }
+      return [];
+    }
+
+    // --- Step 2: Batching logic ---
     if (input.prioritizePinnedComments) {
-      for (const item of commentsData) {
-        const commentText = item.text;
-        if (commentText) {
-          try {
-            const promptStart = Date.now();
-            const result = await parseCommentPrompt({ commentText });
-            const promptDuration = Date.now() - promptStart;
-            aiPromptCount++;
-            aiPromptTotalTime += promptDuration;
-            console.log(`[parseYouTubeCommentFlow] AI prompt duration for comment: ${promptDuration} ms`);
-            if (result.output?.songs && result.output.songs.length > 0) {
-              allSongs = allSongs.concat(result.output.songs);
-              // Stop processing further comments if we have a significant tracklist (5 or more songs)
-              if (result.output.songs.length >= 5) {
-                console.log(`[parseYouTubeCommentFlow] Detected a tracklist with ${result.output.songs.length} songs. Stopping further comment processing.`);
-                break;
-              }
-            }
-          } catch (error) {
-            console.error(`[parseYouTubeCommentFlow] Error processing comment:`, error);
+      // Collect all comment texts
+      const commentTexts = commentsData.map(item => item.text).filter(Boolean);
+      for (let i = 0; i < commentTexts.length; i += BATCH_SIZE) {
+        const batch = commentTexts.slice(i, i + BATCH_SIZE);
+        if (batch.length === 0) continue;
+        try {
+          const songs = await processCommentBatch(batch);
+          allSongs = allSongs.concat(songs);
+          if (songs.length >= 5) {
+            console.log(`[parseYouTubeCommentFlow] Detected a tracklist with ${songs.length} songs in batch. Stopping further comment processing.`);
+            break;
           }
+        } catch (error) {
+          console.error(`[parseYouTubeCommentFlow] Error processing comment batch:`, error);
         }
       }
     }
@@ -247,8 +279,9 @@ const parseYouTubeCommentFlow = ai.defineFlow<
     // If description scanning is enabled, process it as well
     if (input.scanDescription && descriptionText) {
       try {
+        const truncatedDesc = logAndTruncate(descriptionText, 'Description');
         const promptStart = Date.now();
-        const result = await parseCommentPrompt({ commentText: descriptionText });
+        const result = await parseCommentPrompt({ commentText: truncatedDesc });
         const promptDuration = Date.now() - promptStart;
         aiPromptCount++;
         aiPromptTotalTime += promptDuration;
