@@ -1,5 +1,14 @@
 "use client";
+/**
+ * TuneFlow Main Page
+ *
+ * This page provides the main UI for parsing YouTube comments, chapters, and descriptions
+ * to extract songs and display them with album art. Users can also create Spotify playlists
+ * from the parsed songs. The UI includes advanced logic for polling album art, handling
+ * failed fetches, and providing clear feedback to the user.
+ */
 
+// --- Imports ---
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -22,24 +31,37 @@ const youtubeIcon = (
     <path d="M21.593 7.203a2.41 2.41 0 00-1.687-1.687C18.244 5.008 12 5.008 12 5.008s-6.244 0-7.906.508a2.41 2.41 0 00-1.687 1.687C2.008 8.865 2.008 12 2.008 12s0 3.135.508 4.797a2.41 2.41 0 001.687 1.687c1.662.508 7.906.508 7.906.508s6.244 0 7.906-.508a2.41 2.41 0 001.687-1.687C21.992 15.135 21.992 12 21.992 12s0-3.135-.407-4.797zM9.5 16.913V7.093l6.857 4.91 0 0-6.857 4.91z"></path>
   </svg>
 );
-
+// --- Spotify Icon SVG ---
 const spotifyIcon = (
   <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 mr-2">
     <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.233 16.393c-.274.108-1.635.54-4.477.54-2.827 0-4.202-.432-4.477-.54-.281-.112-.505-.394-.505-.715 0-.46 3.097-.879 3.097-2.894 0-.518-.425-.944-.949-.944-.524 0-.949.425-.949.944 0 1.479-1.954 1.86-1.954 2.667 0 .321.224.603.505.715.274.108 1.635.54 4.477.54 2.827 0 4.202-.432 4.477-.54.281-.112.505-.394.505-.715 0-.483-3.121-.879-3.121-2.894 0-.518.425-.944.949-.944.524 0 .949.425.949.944 0 1.479 1.954 1.86 1.954 2.667 0 .321-.224.603-.505-.715z"></path>
   </svg>
 );
 
-// --- Album Art Polling Hook ---
+/**
+ * Custom React Hook: useAlbumArtWithFailure
+ *
+ * Polls the /api/album-art endpoint for a song's album art up to 3 times.
+ * If album art is not found after 3 attempts, triggers onFail callback.
+ *
+ * @param song - The song object (title, artist, etc.)
+ * @param onFail - Callback to call if album art fails after 3 tries
+ * @returns imageUrl - The album art URL (if found)
+ */
 function useAlbumArtWithFailure(song: Song, onFail: (song: Song) => void) {
   const [imageUrl, setImageUrl] = useState(song.imageUrl ?? null);
   const [failCount, setFailCount] = useState(0);
+
   useEffect(() => {
     if (imageUrl || failCount >= 3) return;
     let cancelled = false;
+
     async function poll() {
       const res = await fetch(`/api/album-art?title=${encodeURIComponent(song.title)}&artist=${encodeURIComponent(song.artist)}`);
       const data = await res.json();
+
       if (cancelled) return;
+
       if (data.imageUrl) {
         setImageUrl(data.imageUrl);
       } else {
@@ -53,15 +75,26 @@ function useAlbumArtWithFailure(song: Song, onFail: (song: Song) => void) {
         }
       }
     }
+
     poll();
     return () => { cancelled = true; };
   }, [song.title, song.artist, imageUrl, failCount]);
+
   return imageUrl;
 }
 
-// --- Song Item Component (uses hook per song) ---
+/**
+ * SongItem Component
+ *
+ * Renders a single song in the list, showing album art (if available) or a placeholder.
+ * Uses the polling hook to fetch album art and triggers onFail if not found after 3 tries.
+ *
+ * @param song - The song object
+ * @param onFail - Callback for failed album art
+ */
 function SongItem({ song, onFail }: { song: Song, onFail: (song: Song) => void }) {
   const imageUrl = useAlbumArtWithFailure(song, onFail);
+
   return (
     <li className="flex items-center text-sm border-b pb-1">
       {imageUrl ? (
@@ -81,7 +114,16 @@ function SongItem({ song, onFail }: { song: Song, onFail: (song: Song) => void }
   );
 }
 
+// --- Main Component ---
+
+/**
+ * Home Component (Main App)
+ *
+ * Handles state, UI, and logic for parsing YouTube data and displaying songs.
+ * Includes advanced error handling, album art polling, and playlist creation.
+ */
 export default function Home() {
+  // --- State Hooks ---
   const [youtubeLink, setYoutubeLink] = useState("");
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(false);
@@ -100,10 +142,9 @@ export default function Home() {
   const [playlistAbortController, setPlaylistAbortController] = useState<AbortController | null>(null);
   const [failedAlbumArtSongs, setFailedAlbumArtSongs] = useState<Song[]>([]);
 
-  useEffect(() => {
-    console.warn('Spotify Auth Note: Using backend Client Credentials. Playlist creation requires user authorization (Authorization Code Flow) and might fail.');
-  }, []);
+  // --- Effects ---
 
+  // Check Spotify connection
   useEffect(() => {
     fetch('/api/spotify/me')
       .then(res => res.json())
@@ -261,6 +302,8 @@ export default function Home() {
       return null;
     }
   }
+
+  // --- Handlers ---
 
   const handleParseComments = async () => {
     if (spotifyConnected !== true) {
@@ -568,6 +611,7 @@ export default function Home() {
     }
   }, [abortPlaylist]);
 
+  // --- UI Rendering ---
   return (
     <div className="flex flex-col items-center justify-start min-h-screen p-4 bg-background text-foreground">
       <Card className="w-full max-w-md p-4 rounded-lg shadow-md bg-secondary">
@@ -736,18 +780,24 @@ export default function Home() {
       )}
       {failedAlbumArtSongs.length > 0 && (
         <div className="mt-6">
-          <h3 className="text-lg font-semibold mb-2">Songs Failed to Parse (Album Art or Search)</h3>
-          <ul>
-            {failedAlbumArtSongs.map(song => (
-              <li key={`fail-${song.title}-${song.artist}`} className="flex items-center text-sm border-b pb-1">
-                <div className="w-10 h-10 flex items-center justify-center bg-gray-200 rounded mr-3 border text-xs text-gray-500">N/A</div>
-                <div>
-                  <div className="font-semibold">{song.title}</div>
-                  <div className="text-xs text-gray-500">{song.artist}</div>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <div className="rounded-lg border bg-card text-card-foreground shadow-sm mb-6" style={{ background: 'var(--card-bg,rgba(238, 157, 146, 0.66))' }}>
+            <div className="flex items-center justify-between px-6 pt-6">
+              <h3 className="text-lg font-semibold">Songs Failed to Parse (Album Art or Search)</h3>
+            </div>
+            <div className="p-6 pt-0">
+              <ul className="space-y-2 max-h-60 overflow-y-auto">
+                {failedAlbumArtSongs.map(song => (
+                  <li key={`fail-${song.title}-${song.artist}`} className="flex items-center text-sm border-b pb-1">
+                    <div className="w-10 h-10 flex items-center justify-center bg-gray-200 rounded mr-3 border text-xs text-gray-500">N/A</div>
+                    <div>
+                      <div className="font-semibold">{song.title}</div>
+                      <div className="text-xs text-gray-500">{song.artist}</div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
         </div>
       )}
     </div>
