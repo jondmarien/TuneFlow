@@ -37,6 +37,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" data-theme="system">
+      <head>
+        <meta name="apple-mobile-web-app-title" content="TuneFlow" />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {/* Apply Dark Reader fix to avoid hydration issues */}
         <DarkReaderFixWrapper />
