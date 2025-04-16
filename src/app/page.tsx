@@ -51,6 +51,28 @@ function useAlbumArt(title: string, artist: string, initialUrl: string | null | 
   return imageUrl;
 }
 
+// --- Song Item Component (uses hook per song) ---
+function SongItem({ song }: { song: Song }) {
+  const imageUrl = useAlbumArt(song.title, song.artist, song.imageUrl ?? null);
+  return (
+    <li className="flex items-center text-sm border-b pb-1">
+      {imageUrl ? (
+        <img
+          src={imageUrl}
+          alt={`${song.title} album art`}
+          className="w-10 h-10 object-cover rounded mr-3 border"
+        />
+      ) : (
+        <div className="w-10 h-10 flex items-center justify-center bg-gray-200 rounded mr-3 border text-xs text-gray-500">N/A</div>
+      )}
+      <div>
+        <div className="font-semibold">{song.title}</div>
+        <div className="text-xs text-gray-500">{song.artist}</div>
+      </div>
+    </li>
+  );
+}
+
 export default function Home() {
   const [youtubeLink, setYoutubeLink] = useState("");
   const [songs, setSongs] = useState<Song[]>([]);
@@ -476,12 +498,6 @@ export default function Home() {
     }
   }, [abortPlaylist]);
 
-  // Enhance songs with polling for album art
-  const songsWithPolledArt = songs.map((song) => ({
-    ...song,
-    imageUrl: useAlbumArt(song.title, song.artist, song.imageUrl ?? null),
-  }));
-
   return (
     <div className="flex flex-col items-center justify-start min-h-screen p-4 bg-background text-foreground">
       <Card className="w-full max-w-md p-4 rounded-lg shadow-md bg-secondary">
@@ -526,17 +542,22 @@ export default function Home() {
                   Scan Description for Songs
                 </Label>
               </div>
-              <Button
-                onClick={handleParseComments}
-                disabled={loading || !youtubeLink || spotifyConnected !== true}
-                className="w-full rounded-md bg-blue-400 hover:bg-blue-500 text-white font-semibold shadow"
+              <span
+                title={spotifyConnected !== true ? "Please login to Spotify" : undefined}
+                className="block w-full"
               >
-                {loading && parsingState === 'Fetching & Parsing Comments / Description' ? (
-                  <span className="flex items-center"><Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Parsing...</span>
-                ) : (
-                  'Parse YouTube Video Information'
-                )}
-              </Button>
+                <Button
+                  onClick={handleParseComments}
+                  disabled={loading || !youtubeLink || spotifyConnected !== true}
+                  className="w-full rounded-md bg-blue-400 hover:bg-blue-500 text-white font-semibold shadow disabled:cursor-not-allowed"
+                >
+                  {loading && parsingState === 'Fetching & Parsing Comments / Description' ? (
+                    <span className="flex items-center"><Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Parsing...</span>
+                  ) : (
+                    'Parse YouTube Video Information'
+                  )}
+                </Button>
+              </span>
             </div>
 
             {/* Spotify Connect Section */}
@@ -601,30 +622,15 @@ export default function Home() {
       </Card>
 
       {/* Display Parsed Songs */}
-      {songsWithPolledArt.length > 0 && (
+      {songs.length > 0 && (
         <Card className="w-full max-w-md mt-4 p-4 rounded-lg shadow-md bg-secondary">
           <CardHeader>
-            <CardTitle className="text-lg font-semibold">Parsed Songs ({songsWithPolledArt.length})</CardTitle>
+            <CardTitle className="text-lg font-semibold">Parsed Songs ({songs.length})</CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="space-y-2 max-h-60 overflow-y-auto">
-              {songsWithPolledArt.map((song, index) => (
-                <li key={index} className="flex items-center text-sm border-b pb-1">
-                  {/* Album Art */}
-                  {song.imageUrl ? (
-                    <img
-                      src={song.imageUrl}
-                      alt={song.title + ' album art'}
-                      className="w-10 h-10 object-cover rounded mr-3 border"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 flex items-center justify-center bg-gray-200 rounded mr-3 border text-xs text-gray-500">N/A</div>
-                  )}
-                  <div>
-                    <div className="font-semibold">{song.title}</div>
-                    <div className="text-xs text-gray-500">{song.artist}</div>
-                  </div>
-                </li>
+              {songs.map((song, index) => (
+                <SongItem key={index} song={song} />
               ))}
             </ul>
           </CardContent>
