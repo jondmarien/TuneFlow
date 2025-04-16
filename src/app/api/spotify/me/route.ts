@@ -13,7 +13,8 @@ export async function GET(req: NextRequest) {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (resp.ok) {
-    return NextResponse.json({ connected: true });
+    const user = await resp.json();
+    return NextResponse.json({ connected: true, id: user.id, display_name: user.display_name, ...user });
   } else {
     return NextResponse.json({ connected: false });
   }
