@@ -74,3 +74,6 @@ export async function getTrackAlbumArt(title: string, artist: string): Promise<s
     return null;
   }
 }
+
+// Export getAccessToken for API routes
+export { getAccessToken };

@@ -87,10 +87,23 @@ export default function Home() {
   async function fetchSpotifyGenres(): Promise<string[]> {
     try {
       const res = await fetch('/api/spotify/genres');
-      if (!res.ok) return [];
+      if (!res.ok) {
+        const data = await res.json();
+        toast({
+          title: 'Spotify Genres Error',
+          description: data.error || 'Could not fetch genres from Spotify.',
+          variant: 'destructive',
+        });
+        return [];
+      }
       const data = await res.json();
       return data.genres || [];
-    } catch {
+    } catch (err: any) {
+      toast({
+        title: 'Spotify Genres Error',
+        description: err.message || 'Could not fetch genres from Spotify.',
+        variant: 'destructive',
+      });
       return [];
     }
   }
@@ -106,6 +119,14 @@ export default function Home() {
 
   // Helper to search Spotify for a track URI
   async function searchSpotifyTrackUri(song: Song): Promise<string | null> {
+    if (!spotifyConnected) {
+      toast({
+        title: 'Spotify Login Required',
+        description: 'Please connect your Spotify account before searching for songs.',
+        variant: 'destructive',
+      });
+      return null;
+    }
     try {
       const query = `${song.title} ${song.artist}`;
       const res = await fetch('/api/spotify/search', {
@@ -113,10 +134,23 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ q: query })
       });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        const data = await res.json();
+        toast({
+          title: 'Spotify Search Error',
+          description: data.error || 'Could not search for song on Spotify.',
+          variant: 'destructive',
+        });
+        return null;
+      }
       const data = await res.json();
       return data.track?.uri || null;
-    } catch {
+    } catch (err: any) {
+      toast({
+        title: 'Spotify Search Error',
+        description: err.message || 'Could not search for song on Spotify.',
+        variant: 'destructive',
+      });
       return null;
     }
   }
