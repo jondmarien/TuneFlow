@@ -1,13 +1,32 @@
+// --- YouTube Description API Route ---
+/**
+ * API route to fetch the description of a YouTube video using the YouTube Data API.
+ *
+ * - Accepts a video ID in the request body.
+ * - Uses the googleapis package for YouTube API access.
+ *
+ * Request JSON:
+ *   - videoId: string (required)
+ *
+ * Returns JSON with:
+ *   - description: string
+ *   - error: Error information if the request fails
+ */
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 
-// Initialize YouTube API client
+// --- YouTube API Client ---
 const youtube = google.youtube({
   version: 'v3',
   auth: process.env.YOUTUBE_API_KEY,
 });
 
-// API route to fetch YouTube video description
+/**
+ * Handles POST requests to the YouTube description API route.
+ *
+ * @param req - Request object
+ * @returns NextResponse object
+ */
 export async function POST(req: Request) {
   try {
     const { videoId } = await req.json();
@@ -16,7 +35,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Video ID is required' }, { status: 400 });
     }
 
-    // Fetch video details from YouTube API
+    // --- Fetch Video Details ---
     const response = await youtube.videos.list({
       part: ['snippet'],
       id: [videoId],

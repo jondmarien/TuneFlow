@@ -1,13 +1,34 @@
+// --- Spotify Refresh Token API Route ---
+
+/**
+ * API route to refresh the Spotify access token using the refresh token in cookies.
+ *
+ * - Expects a valid Spotify refresh token in cookies.
+ * - Requests a new access token from Spotify and updates the cookie.
+ *
+ * Returns JSON with:
+ *   - access_token: string
+ *   - expires_in: number
+ *   - error: Error information if the request fails
+ */
+
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 
+/**
+ * Handles POST requests to the Spotify refresh token API route.
+ *
+ * @returns NextResponse object
+ */
 export async function POST() {
+  // Get Spotify refresh token from cookies
   const cookieStore = await cookies();
   const refreshToken = cookieStore.get('spotify_refresh_token')?.value;
   if (!refreshToken) {
     return NextResponse.json({ error: 'No Spotify refresh token found.' }, { status: 401 });
   }
 
+  // Prepare token refresh request
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
     refresh_token: refreshToken,

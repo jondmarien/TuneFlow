@@ -1,15 +1,45 @@
+// --- Album Art API Route ---
+
+/**
+ * API route to fetch and cache Spotify album art for a given track.
+ *
+ * - Checks Redis cache for existing album art URL.
+ * - If not cached, triggers a background fetch and caches the result.
+ * - Uses deduplication to avoid redundant fetches.
+ *
+ * Query Parameters:
+ *   - title: Track title (required)
+ *   - artist: Track artist (required)
+ *
+ * Returns JSON with:
+ *   - imageUrl: Album art URL or null
+ *   - status: 'ready', 'pending', or 'redis_error'
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getTrackAlbumArt } from '@/services/spotify-service';
 import { redis } from '@/utils/redis';
 
+/**
+ * Handles GET requests to the album art API route.
+ *
+ * @param req - NextRequest object
+ * @returns NextResponse object
+ */
 export async function GET(req: NextRequest) {
+  // --- Parse Request Parameters ---
+
   const { searchParams } = new URL(req.url);
   const title = searchParams.get('title');
   const artist = searchParams.get('artist');
 
+  // --- Validate Request Parameters ---
+
   if (!title || !artist) {
     return NextResponse.json({ error: 'Missing title or artist' }, { status: 400 });
   }
+
+  // --- Check Redis Cache ---
 
   const key = `albumArt:${title}|||${artist}`;
   let imageUrl: string | null = null;
@@ -20,11 +50,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ imageUrl: null, status: 'redis_error' });
   }
 
+  // --- Return Cached Result ---
+
   if (imageUrl) {
     return NextResponse.json({ imageUrl, status: 'ready' });
   }
 
-  // Deduplication: Only trigger background fetch if not already in progress
+  // --- Deduplication: Check Fetching Lock ---
+
   const fetchingKey = `albumArt:fetching:${title}|||${artist}`;
   let isFetching = false;
   try {
@@ -32,6 +65,8 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error('[album-art] Redis error checking fetching lock:', err);
   }
+
+  // --- Trigger Background Fetch ---
 
   if (!isFetching) {
     await redis.set(fetchingKey, '1', 'EX', 30); // lock for 30 seconds
@@ -42,6 +77,8 @@ export async function GET(req: NextRequest) {
       redis.del(fetchingKey);
     });
   }
+
+  // --- Return Pending Response ---
 
   return NextResponse.json({ imageUrl: null, status: 'pending' });
 }

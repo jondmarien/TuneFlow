@@ -1,7 +1,28 @@
+// --- YouTube Chapters API Route ---
+/**
+ * API route to extract chapter timestamps from a YouTube video.
+ *
+ * - Accepts a video ID or YouTube URL in the request body.
+ * - Attempts to use youtube-chapters-finder for structured chapters.
+ * - Falls back to parsing timestamps from the video description using the YouTube Data API.
+ *
+ * Request JSON:
+ *   - videoId: string (optional)
+ *   - youtubeUrl: string (optional)
+ *
+ * Returns JSON with:
+ *   - chapters: Array of { start: string, title: string }
+ *   - error: Error information if the request fails
+ */
 import { NextRequest, NextResponse } from 'next/server';
 import chaptersFinder from 'youtube-chapters-finder';
 
-// Helper to extract video ID from URL or input
+// --- Helper: Extract Video ID ---
+/**
+ * Extracts the video ID from a YouTube URL or input string.
+ * @param input - YouTube URL or video ID
+ * @returns Video ID or null
+ */
 function extractVideoId(input: string): string | null {
   try {
     if (input.includes('watch?v=')) {
@@ -16,7 +37,12 @@ function extractVideoId(input: string): string | null {
   }
 }
 
-// Helper to fetch video details from YouTube Data API
+// --- Helper: Fetch Video Details ---
+/**
+ * Fetches video details from the YouTube Data API.
+ * @param videoId - YouTube video ID
+ * @returns Parsed JSON response from YouTube API
+ */
 async function fetchVideoDetails(videoId: string) {
   const apiKey = process.env.YOUTUBE_API_KEY;
   const apiUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`;
@@ -25,7 +51,12 @@ async function fetchVideoDetails(videoId: string) {
   return resp.json();
 }
 
-// Helper to parse chapters from description (timestamps)
+// --- Helper: Parse Chapters from Description ---
+/**
+ * Parses chapter timestamps from a YouTube video description.
+ * @param description - Video description string
+ * @returns Array of chapter objects
+ */
 function parseChaptersFromDescription(description: string) {
   const lines = description.split(/\r?\n/);
   const chapterRegex = /^(\d{1,2}:\d{2}(?::\d{2})?)\s+(.+)/;
@@ -39,6 +70,12 @@ function parseChaptersFromDescription(description: string) {
   return chapters;
 }
 
+/**
+ * Handles POST requests to the YouTube chapters API route.
+ *
+ * @param req - NextRequest object
+ * @returns NextResponse object
+ */
 export async function POST(req: NextRequest) {
   try {
     const { videoId: inputId, youtubeUrl } = await req.json();

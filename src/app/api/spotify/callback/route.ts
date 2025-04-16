@@ -1,7 +1,26 @@
+// --- Spotify Callback API Route ---
+/**
+ * Handles the Spotify OAuth callback, exchanges authorization code for tokens, and sets cookies.
+ *
+ * - Uses forwarded headers for correct origin in tunnel environments.
+ * - Exchanges authorization code for access and refresh tokens.
+ * - Sets HTTP-only cookies for tokens and redirects to home.
+ *
+ * Query Parameters:
+ *   - code: The Spotify authorization code (required)
+ *
+ * Returns a redirect response to the home page with tokens set in cookies.
+ */
 import { NextRequest, NextResponse } from 'next/server';
 
+/**
+ * Handles GET requests to the Spotify callback API route.
+ *
+ * @param req - NextRequest object
+ * @returns NextResponse object (redirect)
+ */
 export async function GET(req: NextRequest) {
-  // Use forwarded headers if present (for ngrok/tunnels)
+  // --- Determine True Origin ---
   const forwardedProto = req.headers.get('x-forwarded-proto');
   const forwardedHost = req.headers.get('x-forwarded-host');
   let trueOrigin = req.nextUrl.origin;
@@ -10,11 +29,13 @@ export async function GET(req: NextRequest) {
   }
   console.log('Callback origin:', trueOrigin);
 
+  // --- Parse Authorization Code ---
   const code = req.nextUrl.searchParams.get('code');
   if (!code) {
     return NextResponse.json({ error: 'No code provided' }, { status: 400 });
   }
 
+  // --- Prepare Token Request ---
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
@@ -34,7 +55,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: data.error_description || 'Failed to fetch tokens' }, { status: 500 });
   }
 
-  // Set cookies using response headers
+  // --- Set Cookies and Redirect ---
   const homeUrl = trueOrigin + '/';
   const res = NextResponse.redirect(homeUrl);
   res.headers.append('Set-Cookie', `spotify_access_token=${data.access_token}; HttpOnly; Path=/; Max-Age=${data.expires_in}; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`);

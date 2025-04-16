@@ -1,15 +1,36 @@
+// --- YouTube Comments API Route ---
+/**
+ * API route to fetch comments from a YouTube video using the YouTube Data API.
+ *
+ * - Accepts a video ID and an optional prioritizePinnedComments flag in the request body.
+ * - Can prioritize fetching pinned comments or fetch up to 200 comments otherwise.
+ * - Uses the googleapis package for YouTube API access.
+ *
+ * Request JSON:
+ *   - videoId: string (required)
+ *   - prioritizePinnedComments: boolean (optional)
+ *
+ * Returns JSON with:
+ *   - comments: Array of { id, author, text, publishedAt }
+ *   - error: Error information if the request fails
+ */
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { GaxiosResponse } from 'gaxios';
 import type { youtube_v3 } from 'googleapis';
 
-// Initialize YouTube API client
+// --- YouTube API Client ---
 const youtube = google.youtube({
   version: 'v3',
   auth: process.env.YOUTUBE_API_KEY,
 });
 
-// API route to fetch YouTube comments
+/**
+ * Handles POST requests to the YouTube comments API route.
+ *
+ * @param req - Request object
+ * @returns NextResponse object
+ */
 export async function POST(req: Request) {
   try {
     const { videoId, prioritizePinnedComments } = await req.json();
@@ -18,7 +39,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Video ID is required' }, { status: 400 });
     }
 
-    // Fetch comments from YouTube API
+    // --- Comment Type Definition ---
     interface Comment {
       id: string | undefined;
       author: string | undefined;
@@ -27,7 +48,7 @@ export async function POST(req: Request) {
     }
     let allComments: Comment[] = [];
 
-    // If prioritizing pinned comments, only fetch the first page and filter for pinned
+    // --- Fetch Pinned Comments ---
     if (prioritizePinnedComments) {
       const response: GaxiosResponse<youtube_v3.Schema$CommentThreadListResponse> = await youtube.commentThreads.list({
         part: ['snippet'],
@@ -46,7 +67,7 @@ export async function POST(req: Request) {
       }));
       allComments = pinnedComments;
     } else {
-      // Not prioritizing pinned: fetch up to 2 pages (max 200 comments)
+      // --- Fetch Up To 200 Comments (2 Pages) ---
       let nextPageToken: string | undefined = undefined;
       let fetchedPages = 0;
       do {
