@@ -29,6 +29,28 @@ const spotifyIcon = (
   </svg>
 );
 
+// --- Album Art Polling Hook ---
+function useAlbumArt(title: string, artist: string, initialUrl: string | null | undefined) {
+  const [imageUrl, setImageUrl] = useState(initialUrl ?? null);
+  useEffect(() => {
+    if (imageUrl) return;
+    let cancelled = false;
+    async function poll() {
+      const res = await fetch(`/api/album-art?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`);
+      const data = await res.json();
+      if (cancelled) return;
+      if (data.imageUrl) {
+        setImageUrl(data.imageUrl);
+      } else {
+        setTimeout(poll, 2000);
+      }
+    }
+    poll();
+    return () => { cancelled = true; };
+  }, [title, artist, imageUrl]);
+  return imageUrl;
+}
+
 export default function Home() {
   const [youtubeLink, setYoutubeLink] = useState("");
   const [songs, setSongs] = useState<Song[]>([]);
@@ -445,6 +467,12 @@ export default function Home() {
     }
   }, [abortPlaylist]);
 
+  // Enhance songs with polling for album art
+  const songsWithPolledArt = songs.map((song) => ({
+    ...song,
+    imageUrl: useAlbumArt(song.title, song.artist, song.imageUrl ?? null),
+  }));
+
   return (
     <div className="flex flex-col items-center justify-start min-h-screen p-4 bg-background text-foreground">
       <Card className="w-full max-w-md p-4 rounded-lg shadow-md bg-secondary">
@@ -564,14 +592,14 @@ export default function Home() {
       </Card>
 
       {/* Display Parsed Songs */}
-      {songs.length > 0 && (
+      {songsWithPolledArt.length > 0 && (
         <Card className="w-full max-w-md mt-4 p-4 rounded-lg shadow-md bg-secondary">
           <CardHeader>
-            <CardTitle className="text-lg font-semibold">Parsed Songs ({songs.length})</CardTitle>
+            <CardTitle className="text-lg font-semibold">Parsed Songs ({songsWithPolledArt.length})</CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="space-y-2 max-h-60 overflow-y-auto">
-              {songs.map((song, index) => (
+              {songsWithPolledArt.map((song, index) => (
                 <li key={index} className="flex items-center text-sm border-b pb-1">
                   {/* Album Art */}
                   {song.imageUrl ? (
@@ -579,17 +607,13 @@ export default function Home() {
                       src={song.imageUrl}
                       alt={song.title + ' album art'}
                       className="w-10 h-10 object-cover rounded mr-3 border"
-                      loading="lazy"
                     />
                   ) : (
-                    <div className="w-10 h-10 mr-3 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground border">
-                      N/A
-                    </div>
+                    <div className="w-10 h-10 flex items-center justify-center bg-gray-200 rounded mr-3 border text-xs text-gray-500">N/A</div>
                   )}
                   <div>
-                    <span className="font-medium">{song.title}</span>
-                    {" - "}
-                    <span className="text-muted-foreground">{song.artist}</span>
+                    <div className="font-semibold">{song.title}</div>
+                    <div className="text-xs text-gray-500">{song.artist}</div>
                   </div>
                 </li>
               ))}
