@@ -527,14 +527,13 @@ export default function Home() {
                 <Checkbox
                   id="ai-playlist-name"
                   checked={useAiPlaylistName}
-                  onCheckedChange={checked => setUseAiPlaylistName(Boolean(checked))}
+                  onCheckedChange={() => {}}
+                  disabled
                 />
                 <Label htmlFor="ai-playlist-name" className="text-sm text-muted-foreground">
                   Use AI to generate playlist name
                 </Label>
-                {useAiPlaylistName && (
-                  <span className="text-xs text-blue-700">(Will use genre/theme from songs)</span>
-                )}
+                <span className="text-xs italic" style={{ color: 'red' }}>(DISABLED UNTIL I CAN FIND A SUITABLE FIX)</span>
               </div>
               <Button
                 onClick={handleCreatePlaylist}
