@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 type Song = {
   title: string;
   artist: string;
+  imageUrl?: string; // Optional album art URL
 };
 
 const youtubeIcon = (
@@ -70,7 +71,12 @@ export default function Home() {
       });
 
       console.log('parseYouTubeComment finished. Result:', result);
-      setSongs(result.songs);
+      setSongs(
+        result.songs.map((song) => ({
+          ...song,
+          imageUrl: song.imageUrl ?? undefined, // Convert null to undefined for TS compatibility
+        }))
+      );
 
       parseToast.update({
         id: parseToast.id,
@@ -114,7 +120,7 @@ export default function Home() {
 
     setLoading(true);
     const playlistToast = toast({ title: 'Starting Playlist Creation...', description: 'Please wait...' });
-    console.log(`Starting playlist creation for user: ${spotifyUserId} with ${songs.length} potential songs.`);
+    console.log(`Starting playlist creation for user ${spotifyUserId} with ${songs.length} potential songs.`);
     setParsingState("Finding Songs on Spotify");
 
     try {
@@ -137,11 +143,24 @@ export default function Home() {
             body: JSON.stringify({ action: 'search', query: searchQuery, type: 'track' }),
           });
 
-          const data = await response.json(); // Read response body once
+          let data;
+          let isJson = false;
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            try {
+              data = await response.json();
+              isJson = true;
+            } catch (err) {
+              data = { error: 'Failed to parse JSON response from /api/spotify.' };
+            }
+          } else {
+            data = { error: 'Received non-JSON response from /api/spotify.' };
+          }
 
           if (!response.ok) {
+             const errorMessage = data?.error || data?.message || `Spotify search failed for "${searchQuery}" (Status: ${response.status})`;
              console.warn(`Spotify search failed for "${searchQuery}" (Status: ${response.status}):`, data);
-             toast({ title: `Search Warning`, description: `Could not find "${song.title}" or search failed.`, variant: "default" });
+             toast({ title: `Search Warning`, description: errorMessage, variant: "default" });
              continue; // Skip this song
           }
 
@@ -150,12 +169,13 @@ export default function Home() {
             console.log(`Found URI: ${track.uri} for "${searchQuery}"`);
             trackUris.push(track.uri);
           } else {
-             console.warn(`No track URI found for "${searchQuery}" in response:`, data);
-             toast({ title: `Not Found`, description: `Could not find "${song.title}" on Spotify.`, variant: "default" });
+             const errorMessage = data?.error || data?.message || `No track URI found for "${searchQuery}" in response:`;
+             console.warn(errorMessage, data);
+             toast({ title: `Not Found`, description: errorMessage, variant: "default" });
           }
         } catch (searchError: any) {
            console.error(`Error during fetch/search for song "${song.title}":`, searchError);
-           toast({ title: `Search Error`, description: `Error searching for "${song.title}".`, variant: "destructive" });
+           toast({ title: `Search Error`, description: searchError.message || `Error searching for "${song.title}".`, variant: "destructive" });
         }
       }
 
@@ -185,7 +205,20 @@ export default function Home() {
         }),
       });
 
-      const createData = await createResponse.json(); // Read body once
+      let createData;
+      let createIsJson = false;
+      const createContentType = createResponse.headers.get('content-type');
+      if (createContentType && createContentType.includes('application/json')) {
+        try {
+          createData = await createResponse.json();
+          createIsJson = true;
+        } catch (err) {
+          createData = { error: 'Failed to parse JSON response from /api/spotify.' };
+        }
+      } else {
+        createData = { error: 'Received non-JSON response from /api/spotify.' };
+      }
+
       console.log('Playlist creation response status:', createResponse.status);
       console.log('Playlist creation response data:', createData);
 
@@ -201,7 +234,14 @@ export default function Home() {
              console.warn('Playlist created with issues:', createData.warning);
          } else {
             // General error
-            throw new Error(createData.error || `Failed to create playlist (Status: ${createResponse.status})`);
+            const errorMessage = createData?.error || createData?.message || `Failed to create playlist (Status: ${createResponse.status})`;
+            playlistToast.update({
+              id: playlistToast.id,
+              title: "Playlist Creation Failed",
+              description: errorMessage,
+              variant: "destructive"
+            });
+            throw new Error(errorMessage);
          }
       } else {
           // Success
@@ -336,8 +376,25 @@ export default function Home() {
           <CardContent>
             <ul className="space-y-2 max-h-60 overflow-y-auto">
               {songs.map((song, index) => (
-                <li key={index} className="text-sm border-b pb-1">
-                  {song.title} - <span className="text-muted-foreground">{song.artist}</span>
+                <li key={index} className="flex items-center text-sm border-b pb-1">
+                  {/* Album Art */}
+                  {song.imageUrl ? (
+                    <img
+                      src={song.imageUrl}
+                      alt={song.title + ' album art'}
+                      className="w-10 h-10 object-cover rounded mr-3 border"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 mr-3 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground border">
+                      N/A
+                    </div>
+                  )}
+                  <div>
+                    <span className="font-medium">{song.title}</span>
+                    {" - "}
+                    <span className="text-muted-foreground">{song.artist}</span>
+                  </div>
                 </li>
               ))}
             </ul>

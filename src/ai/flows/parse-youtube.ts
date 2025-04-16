@@ -9,6 +9,7 @@
 
 import {ai} from '@/ai/ai-instance';
 import {z} from 'genkit';
+import { getTrackAlbumArt } from '@/services/spotify-service';
 
 // --- Input and Output Schemas (Unchanged) ---
 const ParseYouTubeCommentInputSchema = z.object({
@@ -29,6 +30,7 @@ const ParseYouTubeCommentOutputSchema = z.object({
     z.object({
       title: z.string().describe('The title of the song.'),
       artist: z.string().describe('The artist of the song.'),
+      imageUrl: z.union([z.string(), z.null()]).optional().describe('URL of the album art for the song.')
     })
   ).describe('The list of songs identified in the comments.'),
 });
@@ -246,11 +248,22 @@ const parseYouTubeCommentFlow = ai.defineFlow<
       allSongs.map(song => [`${song.title}-${song.artist}`, song])
     ).values());
 
-    console.log(`[parseYouTubeCommentFlow] Returning ${uniqueSongs.length} unique songs.`);
-    if (uniqueSongs.length === 0) {
+    // Fetch album art for each unique song
+    const songsWithImages = await Promise.all(uniqueSongs.map(async (song: { title: string; artist: string }) => {
+      try {
+        const imageUrl = await getTrackAlbumArt(song.title, song.artist);
+        return { ...song, imageUrl: imageUrl || undefined };
+      } catch (error) {
+        console.error(`[parseYouTubeCommentFlow] Error fetching album art for ${song.title} by ${song.artist}:`, error);
+        return song;
+      }
+    }));
+
+    console.log(`[parseYouTubeCommentFlow] Returning ${songsWithImages.length} unique songs.`);
+    if (songsWithImages.length === 0) {
       console.log('[parseYouTubeCommentFlow] No songs identified in the comments or description.');
     }
 
-    return { songs: uniqueSongs };
+    return { songs: songsWithImages };
   }
 );

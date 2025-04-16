@@ -16,7 +16,14 @@ async function getSpotifyAccessToken(clientId: string, clientSecret: string) {
     cache: 'no-store' // Ensure fresh token
   });
 
-  const data = await response.json(); // Read body once
+  const text = await response.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (err) {
+    console.error('Spotify Token API did not return JSON:', text);
+    throw new Error('Spotify Token API did not return JSON');
+  }
 
   if (!response.ok) {
     console.error('Spotify Token Error:', data);
@@ -46,11 +53,18 @@ export async function POST(request: NextRequest) {
       if (!query) {
         return NextResponse.json({ error: 'Missing query for search action' }, { status: 400 });
       }
-      const spotifyApiUrl = `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=${type}&limit=1`; // Limit to 1 for simplicity
+      const spotifyApiUrl = `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=${type}&limit=1`;
       const spotifyResponse = await fetch(spotifyApiUrl, {
         headers: { 'Authorization': `Bearer ${accessToken}` },
       });
-      const data = await spotifyResponse.json();
+      const text = await spotifyResponse.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (err) {
+        console.error('Spotify Search API did not return JSON:', text);
+        return NextResponse.json({ error: 'Spotify API did not return JSON', raw: text }, { status: 502 });
+      }
       if (!spotifyResponse.ok) {
         console.error('Spotify Search API Error:', data);
         return NextResponse.json({ error: `Spotify API error: ${spotifyResponse.statusText}`, details: data }, { status: spotifyResponse.status });
@@ -75,17 +89,22 @@ export async function POST(request: NextRequest) {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ name: playlistName, public: false }), // Default to private playlist
+        body: JSON.stringify({ name: playlistName, public: false }),
       });
-      const playlistData = await createResponse.json();
+      const createText = await createResponse.text();
+      let playlistData;
+      try {
+        playlistData = JSON.parse(createText);
+      } catch (err) {
+        console.error('Spotify Create Playlist API did not return JSON:', createText);
+        return NextResponse.json({ error: 'Spotify Create Playlist API did not return JSON', raw: createText }, { status: 502 });
+      }
       if (!createResponse.ok) {
         console.error('Spotify Create Playlist API Error:', playlistData);
-        return NextResponse.json({ error: `Spotify API error creating playlist: ${createResponse.statusText}`, details: playlistData }, { status: createResponse.status });
+        return NextResponse.json({ error: `Spotify API error: ${createResponse.statusText}`, details: playlistData }, { status: createResponse.status });
       }
-
       // 2. Add tracks to the playlist
-      const playlistId = playlistData.id;
-      const addTracksUrl = `https://api.spotify.com/v1/playlists/${playlistId}/tracks`;
+      const addTracksUrl = `https://api.spotify.com/v1/playlists/${playlistData.id}/tracks`;
       const addResponse = await fetch(addTracksUrl, {
         method: 'POST',
         headers: {
@@ -94,16 +113,19 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify({ uris: trackUris }),
       });
-
-      if (!addResponse.ok) {
-        // Attempt to return playlist ID even if adding tracks fails partially
-        const errorData = await addResponse.json();
-        console.error('Spotify Add Tracks API Error:', errorData);
-        return NextResponse.json({ warning: `Playlist created (ID: ${playlistId}) but failed to add tracks: ${addResponse.statusText}`, playlistId: playlistId, details: errorData }, { status: addResponse.status });
+      const addText = await addResponse.text();
+      let addData;
+      try {
+        addData = JSON.parse(addText);
+      } catch (err) {
+        console.error('Spotify Add Tracks API did not return JSON:', addText);
+        return NextResponse.json({ error: 'Spotify Add Tracks API did not return JSON', raw: addText }, { status: 502 });
       }
-
-      return NextResponse.json({ playlistId: playlistId, snapshot_id: (await addResponse.json()).snapshot_id });
-
+      if (!addResponse.ok) {
+        console.error('Spotify Add Tracks API Error:', addData);
+        return NextResponse.json({ error: `Spotify API error: ${addResponse.statusText}`, details: addData }, { status: addResponse.status });
+      }
+      return NextResponse.json({ playlistId: playlistData.id, snapshot_id: addData.snapshot_id });
     }
     else {
       return NextResponse.json({ error: 'Invalid action specified' }, { status: 400 });
