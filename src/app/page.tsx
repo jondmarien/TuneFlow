@@ -30,30 +30,38 @@ const spotifyIcon = (
 );
 
 // --- Album Art Polling Hook ---
-function useAlbumArt(title: string, artist: string, initialUrl: string | null | undefined) {
-  const [imageUrl, setImageUrl] = useState(initialUrl ?? null);
+function useAlbumArtWithFailure(song: Song, onFail: (song: Song) => void) {
+  const [imageUrl, setImageUrl] = useState(song.imageUrl ?? null);
+  const [failCount, setFailCount] = useState(0);
   useEffect(() => {
-    if (imageUrl) return;
+    if (imageUrl || failCount >= 3) return;
     let cancelled = false;
     async function poll() {
-      const res = await fetch(`/api/album-art?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`);
+      const res = await fetch(`/api/album-art?title=${encodeURIComponent(song.title)}&artist=${encodeURIComponent(song.artist)}`);
       const data = await res.json();
       if (cancelled) return;
       if (data.imageUrl) {
         setImageUrl(data.imageUrl);
       } else {
-        setTimeout(poll, 2000);
+        if (failCount < 2) {
+          setTimeout(poll, 2000);
+          setFailCount((c) => c + 1);
+        } else {
+          setFailCount((c) => c + 1);
+          // Mark as failed after 3 tries
+          onFail(song);
+        }
       }
     }
     poll();
     return () => { cancelled = true; };
-  }, [title, artist, imageUrl]);
+  }, [song.title, song.artist, imageUrl, failCount]);
   return imageUrl;
 }
 
 // --- Song Item Component (uses hook per song) ---
-function SongItem({ song }: { song: Song }) {
-  const imageUrl = useAlbumArt(song.title, song.artist, song.imageUrl ?? null);
+function SongItem({ song, onFail }: { song: Song, onFail: (song: Song) => void }) {
+  const imageUrl = useAlbumArtWithFailure(song, onFail);
   return (
     <li className="flex items-center text-sm border-b pb-1">
       {imageUrl ? (
@@ -81,6 +89,8 @@ export default function Home() {
   const [playlistName, setPlaylistName] = useState<string>("");
   const [prioritizePinned, setPrioritizePinned] = useState(false);
   const [scanDescription, setScanDescription] = useState(false);
+  const [scanChapters, setScanChapters] = useState(false);
+  const [scanComments, setScanComments] = useState(false);
   const [spotifyConnected, setSpotifyConnected] = useState<boolean | null>(null);
   const { toast } = useToast();
   const [spotifyReady, setSpotifyReady] = useState(true); // Assume ready for basic search initially
@@ -88,6 +98,7 @@ export default function Home() {
   const [canCreatePlaylist, setCanCreatePlaylist] = useState(false);
   const [abortPlaylist, setAbortPlaylist] = useState(false);
   const [playlistAbortController, setPlaylistAbortController] = useState<AbortController | null>(null);
+  const [failedAlbumArtSongs, setFailedAlbumArtSongs] = useState<Song[]>([]);
 
   useEffect(() => {
     console.warn('Spotify Auth Note: Using backend Client Credentials. Playlist creation requires user authorization (Authorization Code Flow) and might fail.');
@@ -267,56 +278,115 @@ export default function Home() {
       toast({ title: "Input Missing", description: "Please enter a YouTube URL.", variant: "destructive", position: 'top-left' });
       return;
     }
+    if (!scanChapters && !scanDescription && !scanComments) {
+      toast({ title: "No Extraction Selected", description: "Please select at least one extraction method.", variant: "destructive", position: 'top-left' });
+      return;
+    }
 
     setLoading(true);
     setSongs([]);
+    setFailedAlbumArtSongs([]);
     setCanCreatePlaylist(false);
+
     const parseToast = toast({ title: 'Starting YouTube Comment Parsing...', description: 'Please wait...', position: 'top-left' });
     console.log('Initiating YouTube comment parsing...');
     setParsingState("Fetching & Parsing Comments");
 
-    try {
-      parseToast.update({ id: parseToast.id, title: 'Calling AI Flow...', description: 'Fetching and analyzing comments.' });
-      console.log(`Calling parseYouTubeComment for URL: ${youtubeLink}, prioritizePinned: ${prioritizePinned}, scanDescription: ${scanDescription}`);
+    const videoId = getYoutubeVideoId(youtubeLink);
+    let errors: string[] = [];
+    let allSongs: Song[] = [];
 
-      const result: ParseYouTubeCommentOutput = await parseYouTubeComment({
-        youtubeUrl: youtubeLink,
-        prioritizePinnedComments: prioritizePinned,
-        scanDescription: scanDescription
-      });
-
-      console.log('parseYouTubeComment finished. Result:', result);
-      setSongs(
-        result.songs.map((song) => ({
-          ...song,
-          imageUrl: song.imageUrl ?? undefined, // Convert null to undefined for TS compatibility
-        }))
-      );
-
-      parseToast.update({
-        id: parseToast.id,
-        title: "Parsing Complete",
-        description: `Found ${result.songs.length} potential songs. Check the list below.`,
-        // variant: "success" // Commented out as 'success' is not a valid variant
-      });
-      console.log(`Successfully parsed ${result.songs.length} songs.`);
-
-      if (result.songs.length > 0) {
-        setCanCreatePlaylist(true);
+    // Chapters extraction
+    if (scanChapters) {
+      setLoading(true);
+      setSongs([]);
+      setCanCreatePlaylist(false);
+      setParsingState("Fetching & Parsing Chapters");
+      toast({ title: 'Starting YouTube Chapters Parsing...', description: 'Please wait...', position: 'top-left' });
+      try {
+        const videoId = youtubeLink.includes('watch?v=') ? new URL(youtubeLink.startsWith('http') ? youtubeLink : 'https://' + youtubeLink).searchParams.get('v') : youtubeLink;
+        const resp = await fetch('/api/youtube/chapters', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Failed to fetch chapters');
+        if (!data.chapters?.length) throw new Error('No chapters found in this video.');
+        // Compose a string of all chapter titles for AI
+        const chapterText = data.chapters.map((ch: any) => `${ch.start} ${ch.title}`).join('\n');
+        setParsingState("Processing Chapters with AI");
+        const aiResult: ParseYouTubeCommentOutput = await parseYouTubeComment({ youtubeUrl: youtubeLink, prioritizePinnedComments: prioritizePinned, scanDescription: false, chapters: chapterText });
+        allSongs = allSongs.concat(aiResult.songs.map(song => ({ ...song, imageUrl: song.imageUrl ?? undefined })));
+      } catch (err: any) {
+        errors.push('Chapter extraction failed: ' + (err.message || String(err)));
       }
-    } catch (error: any) {
-      console.error('Error during handleParseComments:', error);
-      parseToast.update({
-        id: parseToast.id,
-        title: "Parsing Failed",
-        description: error.message || "An unknown error occurred.",
-        variant: "destructive",
+    }
+
+    // Description extraction
+    if (scanDescription) {
+      try {
+        const resp = await fetch('/api/youtube/description', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Failed to fetch description');
+        if (data.description) {
+          setParsingState("Processing Description with AI");
+          const aiResult: ParseYouTubeCommentOutput = await parseYouTubeComment({ youtubeUrl: youtubeLink, prioritizePinnedComments: prioritizePinned, scanDescription: true, description: data.description });
+          allSongs = allSongs.concat(aiResult.songs.map(song => ({ ...song, imageUrl: song.imageUrl ?? undefined })));
+        } else {
+          errors.push('No description found in this video.');
+        }
+      } catch (err: any) {
+        errors.push('Description extraction failed: ' + (err.message || String(err)));
+      }
+    }
+
+    // Comments extraction
+    if (scanComments) {
+      try {
+        setParsingState("Fetching & Parsing Comments");
+        const resp = await fetch('/api/youtube/comments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId, prioritizePinnedComments: prioritizePinned }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Failed to fetch comments');
+        if (data.comments?.length) {
+          setParsingState("Processing Comments with AI");
+          const aiResult: ParseYouTubeCommentOutput = await parseYouTubeComment({ youtubeUrl: youtubeLink, prioritizePinnedComments: prioritizePinned, scanDescription: false, comments: data.comments });
+          allSongs = allSongs.concat(aiResult.songs.map(song => ({ ...song, imageUrl: song.imageUrl ?? undefined })));
+        } else {
+          errors.push('No comments found with tracklist/songlist in this video.');
+        }
+      } catch (err: any) {
+        errors.push('Comments extraction failed: ' + (err.message || String(err)));
+      }
+    }
+
+    setSongs(allSongs);
+    setCanCreatePlaylist(allSongs.length > 0);
+    setParsingState(null);
+    setLoading(false);
+
+    if (errors.length) {
+      toast({
+        title: allSongs.length > 0 ? 'Some Extractions Failed' : 'Extraction Failed',
+        description: errors.join(' | '),
+        variant: allSongs.length > 0 ? 'default' : 'destructive',
         position: 'top-left',
       });
-    } finally {
-      console.log('handleParseComments finished.');
-      setLoading(false);
-      setParsingState(null);
+    } else if (allSongs.length === 0) {
+      toast({
+        title: 'No Songs Found',
+        description: 'No songs could be extracted from the selected sources.',
+        variant: 'destructive',
+        position: 'top-left',
+      });
     }
   };
 
@@ -522,12 +592,23 @@ export default function Home() {
               />
               <div className="flex items-center space-x-2">
                 <Checkbox
+                  id="scan-comments"
+                  checked={scanComments}
+                  onCheckedChange={(checked) => setScanComments(Boolean(checked))}
+                  disabled={loading}
+                />
+                <Label htmlFor="scan-comments" className="text-sm text-muted-foreground">
+                  Scan YouTube Comments for Songs
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2 pl-7">
+                <Checkbox
                   id="prioritize-pinned"
                   checked={prioritizePinned}
                   onCheckedChange={(checked) => setPrioritizePinned(Boolean(checked))}
-                  disabled={loading}
+                  disabled={!scanComments || loading}
                 />
-                <Label htmlFor="prioritize-pinned" className="text-sm text-muted-foreground">
+                <Label htmlFor="prioritize-pinned" className="text-xs text-muted-foreground">
                   Prioritize Pinned Comments (if available)
                 </Label>
               </div>
@@ -540,6 +621,17 @@ export default function Home() {
                 />
                 <Label htmlFor="scan-description" className="text-sm text-muted-foreground">
                   Scan Description for Songs
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="scan-chapters"
+                  checked={scanChapters}
+                  onCheckedChange={(checked) => setScanChapters(Boolean(checked))}
+                  disabled={loading}
+                />
+                <Label htmlFor="scan-chapters" className="text-sm text-muted-foreground">
+                  Scan YouTube Chapters for Songs
                 </Label>
               </div>
               <span
@@ -629,12 +721,34 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <ul className="space-y-2 max-h-60 overflow-y-auto">
-              {songs.map((song, index) => (
-                <SongItem key={index} song={song} />
+              {songs.map((song) => (
+                <SongItem key={`${song.title}-${song.artist}`} song={song} onFail={(failedSong) => {
+                  setFailedAlbumArtSongs((prev) => {
+                    // Only add if not already present
+                    if (prev.find(s => s.title === failedSong.title && s.artist === failedSong.artist)) return prev;
+                    return [...prev, failedSong];
+                  });
+                }} />
               ))}
             </ul>
           </CardContent>
         </Card>
+      )}
+      {failedAlbumArtSongs.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-lg font-semibold mb-2">Songs Failed to Parse (Album Art or Search)</h3>
+          <ul>
+            {failedAlbumArtSongs.map(song => (
+              <li key={`fail-${song.title}-${song.artist}`} className="flex items-center text-sm border-b pb-1">
+                <div className="w-10 h-10 flex items-center justify-center bg-gray-200 rounded mr-3 border text-xs text-gray-500">N/A</div>
+                <div>
+                  <div className="font-semibold">{song.title}</div>
+                  <div className="text-xs text-gray-500">{song.artist}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );
