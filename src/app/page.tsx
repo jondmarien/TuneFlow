@@ -54,6 +54,42 @@ export default function Home() {
       .catch(() => setSpotifyConnected(false));
   }, []);
 
+  useEffect(() => {
+    // Check on mount
+    fetch('/api/spotify/me')
+      .then(res => res.json())
+      .then(data => setSpotifyConnected(data.connected))
+      .catch(() => setSpotifyConnected(false));
+
+    // Check every 5 minutes
+    const interval = setInterval(() => {
+      fetch('/api/spotify/me')
+        .then(res => res.json())
+        .then(data => {
+          if (!data.connected) {
+            setSpotifyConnected(false);
+            toast({
+              title: "Spotify Login Required",
+              description: "Your Spotify session has expired or is invalid. Please log in again.",
+              variant: "destructive",
+              position: "top-left"
+            });
+          }
+        })
+        .catch(() => {
+          setSpotifyConnected(false);
+          toast({
+            title: "Spotify Login Required",
+            description: "Could not verify your Spotify session. Please log in again.",
+            variant: "destructive",
+            position: "top-left"
+          });
+        });
+    }, 5 * 60 * 1000); // 5 minutes
+
+    return () => clearInterval(interval);
+  }, []);
+
   // Helper to extract YouTube video ID
   function getYoutubeVideoId(url: string): string | null {
     try {
@@ -93,6 +129,7 @@ export default function Home() {
           title: 'Spotify Genres Error',
           description: data.error || 'Could not fetch genres from Spotify.',
           variant: 'destructive',
+          position: 'top-left',
         });
         return [];
       }
@@ -103,6 +140,7 @@ export default function Home() {
         title: 'Spotify Genres Error',
         description: err.message || 'Could not fetch genres from Spotify.',
         variant: 'destructive',
+        position: 'top-left',
       });
       return [];
     }
@@ -124,6 +162,7 @@ export default function Home() {
         title: 'Spotify Login Required',
         description: 'Please connect your Spotify account before searching for songs.',
         variant: 'destructive',
+        position: 'top-left',
       });
       return null;
     }
@@ -140,6 +179,7 @@ export default function Home() {
           title: 'Spotify Search Error',
           description: data.error || 'Could not search for song on Spotify.',
           variant: 'destructive',
+          position: 'top-left',
         });
         return null;
       }
@@ -150,6 +190,7 @@ export default function Home() {
         title: 'Spotify Search Error',
         description: err.message || 'Could not search for song on Spotify.',
         variant: 'destructive',
+        position: 'top-left',
       });
       return null;
     }
@@ -159,14 +200,14 @@ export default function Home() {
     console.log('handleParseComments started');
     if (!youtubeLink) {
       console.warn('YouTube link missing');
-      toast({ title: "Input Missing", description: "Please enter a YouTube URL.", variant: "destructive" });
+      toast({ title: "Input Missing", description: "Please enter a YouTube URL.", variant: "destructive", position: 'top-left' });
       return;
     }
 
     setLoading(true);
     setSongs([]);
     setCanCreatePlaylist(false);
-    const parseToast = toast({ title: 'Starting YouTube Comment Parsing...', description: 'Please wait...' });
+    const parseToast = toast({ title: 'Starting YouTube Comment Parsing...', description: 'Please wait...', position: 'top-left' });
     console.log('Initiating YouTube comment parsing...');
     setParsingState("Fetching & Parsing Comments");
 
@@ -205,7 +246,8 @@ export default function Home() {
         id: parseToast.id,
         title: "Parsing Failed",
         description: error.message || "An unknown error occurred.",
-        variant: "destructive"
+        variant: "destructive",
+        position: 'top-left',
       });
     } finally {
       console.log('handleParseComments finished.');
@@ -217,16 +259,16 @@ export default function Home() {
   const handleCreatePlaylist = async () => {
     console.log('handleCreatePlaylist started');
     if (!spotifyConnected) {
-      toast({ title: 'Spotify Login Required', description: 'Please connect your Spotify account before creating a playlist.', variant: 'destructive' });
+      toast({ title: 'Spotify Login Required', description: 'Please connect your Spotify account before creating a playlist.', variant: 'destructive', position: 'top-left' });
       return;
     }
     if (songs.length === 0) {
       console.warn('No songs available to create playlist');
-      toast({ title: "No Songs", description: "No songs found to add to the playlist.", variant: "destructive" });
+      toast({ title: "No Songs", description: "No songs found to add to the playlist.", variant: "destructive", position: 'top-left' });
       return;
     }
     setLoading(true);
-    const playlistToast = toast({ title: 'Starting Playlist Creation...', description: 'Please wait...' });
+    const playlistToast = toast({ title: 'Starting Playlist Creation...', description: 'Please wait...', position: 'top-left' });
     setParsingState("Finding Songs on Spotify");
     let finalPlaylistName = playlistName;
     try {
@@ -260,6 +302,7 @@ export default function Home() {
           title: 'Spotify User Error',
           description: 'Could not fetch Spotify user ID.',
           variant: 'destructive',
+          position: 'top-left',
         });
         setLoading(false);
         setParsingState(null);
@@ -296,7 +339,8 @@ export default function Home() {
           id: playlistToast.id,
           title: "Playlist Creation Failed",
           description: errorMessage,
-          variant: "destructive"
+          variant: "destructive",
+          position: 'top-left',
         });
         throw new Error(errorMessage);
       } else {
@@ -345,7 +389,8 @@ export default function Home() {
         id: playlistToast.id,
         title: "Playlist Creation Failed",
         description: error.message || "An unexpected error occurred.",
-        variant: "destructive"
+        variant: "destructive",
+        position: 'top-left',
       });
     } finally {
       setLoading(false);

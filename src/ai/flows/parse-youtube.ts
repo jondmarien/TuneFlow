@@ -212,21 +212,24 @@ const parseYouTubeCommentFlow = ai.defineFlow<
 
     // Process comments with AI prompt
     let allSongs: { title: string; artist: string }[] = [];
-    for (const item of commentsData) {
-      const commentText = item.text;
-      if (commentText) {
-        try {
-          const result = await parseCommentPrompt({ commentText });
-          if (result.output?.songs && result.output.songs.length > 0) {
-            allSongs = allSongs.concat(result.output.songs);
-            // Stop processing further comments if we have a significant tracklist (5 or more songs)
-            if (result.output.songs.length >= 5) {
-              console.log(`[parseYouTubeCommentFlow] Detected a tracklist with ${result.output.songs.length} songs. Stopping further comment processing.`);
-              break;
+    // Only process comments if prioritizePinnedComments is true
+    if (input.prioritizePinnedComments) {
+      for (const item of commentsData) {
+        const commentText = item.text;
+        if (commentText) {
+          try {
+            const result = await parseCommentPrompt({ commentText });
+            if (result.output?.songs && result.output.songs.length > 0) {
+              allSongs = allSongs.concat(result.output.songs);
+              // Stop processing further comments if we have a significant tracklist (5 or more songs)
+              if (result.output.songs.length >= 5) {
+                console.log(`[parseYouTubeCommentFlow] Detected a tracklist with ${result.output.songs.length} songs. Stopping further comment processing.`);
+                break;
+              }
             }
+          } catch (error) {
+            console.error(`[parseYouTubeCommentFlow] Error processing comment:`, error);
           }
-        } catch (error) {
-          console.error(`[parseYouTubeCommentFlow] Error processing comment:`, error);
         }
       }
     }
@@ -248,8 +251,8 @@ const parseYouTubeCommentFlow = ai.defineFlow<
       allSongs.map(song => [`${song.title}-${song.artist}`, song])
     ).values());
 
-    // Fetch album art for each unique song
-    const songsWithImages = await Promise.all(uniqueSongs.map(async (song: { title: string; artist: string }) => {
+    // Fetch album images for each song (if available)
+    const songsWithImages = await Promise.all(uniqueSongs.map(async (song) => {
       try {
         const imageUrl = await getTrackAlbumArt(song.title, song.artist);
         return { ...song, imageUrl: imageUrl || undefined };
