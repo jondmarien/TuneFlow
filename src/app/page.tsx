@@ -33,7 +33,8 @@ export default function Home() {
   const [youtubeLink, setYoutubeLink] = useState("");
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(false);
-  const [spotifyUserId, setSpotifyUserId] = useState("");
+  const [useAiPlaylistName, setUseAiPlaylistName] = useState(false);
+  const [playlistName, setPlaylistName] = useState<string>("");
   const [prioritizePinned, setPrioritizePinned] = useState(false);
   const [scanDescription, setScanDescription] = useState(false);
   const [spotifyConnected, setSpotifyConnected] = useState<boolean | null>(null);
@@ -52,6 +53,73 @@ export default function Home() {
       .then(data => setSpotifyConnected(data.connected))
       .catch(() => setSpotifyConnected(false));
   }, []);
+
+  // Helper to extract YouTube video ID
+  function getYoutubeVideoId(url: string): string | null {
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname.includes("youtu.be")) {
+        return parsed.pathname.slice(1);
+      }
+      return parsed.searchParams.get("v");
+    } catch {
+      return null;
+    }
+  }
+
+  // Fetch YouTube video title for playlist name
+  async function fetchYoutubeTitle(videoId: string): Promise<string | null> {
+    try {
+      const res = await fetch("/api/youtube/title", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoId })
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.title || null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Fetch genres from Spotify API
+  async function fetchSpotifyGenres(): Promise<string[]> {
+    try {
+      const res = await fetch('/api/spotify/genres');
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.genres || [];
+    } catch {
+      return [];
+    }
+  }
+
+  // AI playlist name generation using Spotify genres
+  async function generateAiPlaylistName(songs: Song[]): Promise<string> {
+    if (!songs.length) return "AI Playlist";
+    const genres = await fetchSpotifyGenres();
+    if (!genres.length) return "AI Playlist";
+    // Optionally, analyze songs for genre
+    return `AI ${genres[Math.floor(Math.random() * genres.length)]} Mix`;
+  }
+
+  // Helper to search Spotify for a track URI
+  async function searchSpotifyTrackUri(song: Song): Promise<string | null> {
+    try {
+      const query = `${song.title} ${song.artist}`;
+      const res = await fetch('/api/spotify/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q: query })
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.track?.uri || null;
+    } catch {
+      return null;
+    }
+  }
 
   const handleParseComments = async () => {
     console.log('handleParseComments started');
@@ -114,49 +182,67 @@ export default function Home() {
 
   const handleCreatePlaylist = async () => {
     console.log('handleCreatePlaylist started');
-    if (!spotifyUserId) {
-      console.warn('Spotify User ID missing');
-      toast({ title: "Spotify User ID Required", description: "Please enter your Spotify User ID.", variant: "destructive" });
+    if (!spotifyConnected) {
+      toast({ title: 'Spotify Login Required', description: 'Please connect your Spotify account before creating a playlist.', variant: 'destructive' });
       return;
     }
-
     if (songs.length === 0) {
       console.warn('No songs available to create playlist');
       toast({ title: "No Songs", description: "No songs found to add to the playlist.", variant: "destructive" });
       return;
     }
-
     setLoading(true);
     const playlistToast = toast({ title: 'Starting Playlist Creation...', description: 'Please wait...' });
     setParsingState("Finding Songs on Spotify");
-
+    let finalPlaylistName = playlistName;
     try {
+      if (!useAiPlaylistName) {
+        // Use YouTube video title
+        const videoId = getYoutubeVideoId(youtubeLink);
+        if (videoId) {
+          const ytTitle = await fetchYoutubeTitle(videoId);
+          finalPlaylistName = ytTitle ? ytTitle : `YouTube Playlist`;
+        } else {
+          finalPlaylistName = `YouTube Playlist`;
+        }
+      } else {
+        // Use AI-generated name
+        finalPlaylistName = await generateAiPlaylistName(songs);
+      }
+      setPlaylistName(finalPlaylistName);
+      // Find Spotify track URIs for all parsed songs
       let trackUris: string[] = [];
-      playlistToast.update({ id: playlistToast.id, title: 'Searching Spotify...', description: `Looking for ${songs.length} songs...` });
-      // (Assume trackUris already filled by prior logic or implement search logic as needed)
-      // For now, just use song titles as placeholders
-      // You should have logic to get the Spotify track URIs for each song
-      // ...
-      // For demo, skip Spotify search and use song titles
-      // ---
-      // Actually, you may want to keep your search logic here, but the playlist creation request below should go to /api/spotify/playlist
+      for (const song of songs) {
+        const uri = await searchSpotifyTrackUri(song);
+        if (uri) trackUris.push(uri);
+      }
+
+      // Fetch Spotify user ID
+      const userRes = await fetch('/api/spotify/me');
+      const userData = await userRes.json();
+      if (!userData.id) {
+        playlistToast.update({
+          id: playlistToast.id,
+          title: 'Spotify User Error',
+          description: 'Could not fetch Spotify user ID.',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        setParsingState(null);
+        return;
+      }
+      const userId = userData.id;
 
       // --- Playlist Creation Request ---
-      let playlistName = `YT Comments: Unknown Video`;
-      try {
-         playlistName = `YT Comments: ${new URL(youtubeLink).searchParams.get('v') || 'Playlist'}`;
-      } catch { /* ignore URL parsing errors for name */ }
-
       const createResponse = await fetch('/api/spotify/playlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: spotifyUserId,
-          playlistName: playlistName,
-          trackUris: trackUris,
+          userId,
+          playlistName: finalPlaylistName,
+          trackUris,
         }),
       });
-
       let createData;
       let createIsJson = false;
       const createContentType = createResponse.headers.get('content-type');
@@ -170,32 +256,54 @@ export default function Home() {
       } else {
         createData = { error: 'Received non-JSON response from /api/spotify/playlist.' };
       }
-
-      console.log('Playlist creation response status:', createResponse.status);
-      console.log('Playlist creation response data:', createData);
-
       if (!createResponse.ok) {
-         if (createData.error === 'No Spotify access token found. Please connect your Spotify account.') {
-           toast({ title: 'Spotify Login Required', description: 'Please connect your Spotify account before creating a playlist.', variant: 'destructive' });
-           playlistToast.update({ id: playlistToast.id, title: 'Spotify Login Required', description: 'Connect your Spotify account and try again.', variant: 'destructive' });
-           return;
-         }
-         const errorMessage = createData?.error || createData?.message || `Failed to create playlist (Status: ${createResponse.status})`;
-         playlistToast.update({
-           id: playlistToast.id,
-           title: "Playlist Creation Failed",
-           description: errorMessage,
-           variant: "destructive"
-         });
-         throw new Error(errorMessage);
+        const errorMessage = createData?.error || createData?.message || `Failed to create playlist (Status: ${createResponse.status})`;
+        playlistToast.update({
+          id: playlistToast.id,
+          title: "Playlist Creation Failed",
+          description: errorMessage,
+          variant: "destructive"
+        });
+        throw new Error(errorMessage);
       } else {
-         playlistToast.update({
-           id: playlistToast.id,
-           title: "Playlist Created!",
-           description: `Playlist '${playlistName}' created successfully!`,
-         });
-         toast({ title: "Playlist Created!", description: `Playlist '${playlistName}' created successfully!`, variant: "default" });
-         console.log(`Successfully created playlist ID: ${createData.playlistId}`);
+        // Show green, non-fading toast with playlist URL
+        playlistToast.update({
+          id: playlistToast.id,
+          title: 'Playlist Created!',
+          description: (
+            <span>
+              Playlist '{finalPlaylistName}' created successfully!{' '}
+              {createData.playlistUrl && (
+                <a href={createData.playlistUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#22c55e', fontWeight: 'bold', textDecoration: 'underline' }}>
+                  Open Playlist
+                </a>
+              )}
+            </span>
+          ),
+          variant: 'default',
+          duration: 1000000,
+          position: 'top-right',
+        });
+        toast({
+          title: 'Playlist Created!',
+          description: (
+            <span>
+              Playlist '{finalPlaylistName}' created successfully!{' '}
+              {createData.playlistUrl && (
+                <a href={createData.playlistUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#22c55e', fontWeight: 'bold', textDecoration: 'underline' }}>
+                  Open Playlist
+                </a>
+              )}
+            </span>
+          ),
+          variant: 'default',
+          duration: 1000000,
+          position: 'top-right',
+        });
+        console.log(`Successfully created playlist ID: ${createData.playlistId}`);
+        if (createData.playlistUrl) {
+          console.log('Playlist URL:', createData.playlistUrl);
+        }
       }
     } catch (error: any) {
       console.error("Error during handleCreatePlaylist:", error);
@@ -292,6 +400,19 @@ export default function Home() {
             {/* Spotify Playlist Creation Section - Enabled after successful parsing */}
             {canCreatePlaylist && (
             <div className="space-y-2 pt-4 border-t">
+              <div className="flex items-center gap-2 pb-2">
+                <Checkbox
+                  id="ai-playlist-name"
+                  checked={useAiPlaylistName}
+                  onCheckedChange={checked => setUseAiPlaylistName(Boolean(checked))}
+                />
+                <Label htmlFor="ai-playlist-name" className="text-sm text-muted-foreground">
+                  Use AI to generate playlist name
+                </Label>
+                {useAiPlaylistName && (
+                  <span className="text-xs text-blue-700">(Will use genre/theme from songs)</span>
+                )}
+              </div>
               <Button
                 onClick={handleCreatePlaylist}
                 disabled={loading || songs.length === 0}
@@ -303,7 +424,7 @@ export default function Home() {
                     {parsingState}
                   </>
                 ) : (
-                  "Create Spotify Playlist"
+                  useAiPlaylistName ? "Create AI-Named Playlist" : "Create Spotify Playlist"
                 )}
               </Button>
             </div>

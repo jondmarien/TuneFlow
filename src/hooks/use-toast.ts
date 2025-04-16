@@ -5,8 +5,14 @@ import * as React from "react"
 
 import type {
   ToastActionElement,
-  ToastProps,
+  ToastProps as BaseToastProps,
 } from "@/components/ui/toast"
+
+export type ToastPosition = "top-right" | "top-center" | "top-left" | "bottom-right" | "bottom-center" | "bottom-left";
+
+export type ToastProps = BaseToastProps & {
+  position?: ToastPosition;
+};
 
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000000

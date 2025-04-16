@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ name: playlistName, public: false }),
+    body: JSON.stringify({ name: playlistName, public: true }),
   });
   const playlistData = await createResponse.json();
   if (!createResponse.ok) {
@@ -43,5 +43,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: addData.error?.message || 'Failed to add tracks', details: addData }, { status: addResponse.status });
   }
 
-  return NextResponse.json({ playlistId: playlistData.id, snapshot_id: addData.snapshot_id });
+  return NextResponse.json({ playlistId: playlistData.id, playlistUrl: playlistData.external_urls?.spotify, snapshot_id: addData.snapshot_id });
 }
