@@ -10,6 +10,7 @@
 import {ai} from '@/ai/ai-instance';
 import {z} from 'genkit';
 import { getTrackAlbumArt } from '@/services/spotify-service';
+import { redis } from '@/utils/redis';
 
 // --- Input and Output Schemas (Unchanged) ---
 const ParseYouTubeCommentInputSchema = z.object({
@@ -215,12 +216,23 @@ const parseYouTubeCommentFlow = ai.defineFlow<
     let aiPromptCount = 0;
     let aiPromptTotalTime = 0;
 
+    // --- Utility: Clean comment (strip whitespace, emojis, metadata) ---
+    function cleanComment(text: string): string {
+      if (!text) return '';
+      // Remove emojis
+      const emojiRegex = /[\p{Emoji_Presentation}\p{Emoji}\u200d]+/gu;
+      let cleaned = text.replace(emojiRegex, '');
+      // Remove YouTube metadata (timestamps, "Edited", etc)
+      cleaned = cleaned.replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, ''); // timestamps
+      cleaned = cleaned.replace(/\bEdited\b/gi, '');
+      // Remove excessive whitespace
+      cleaned = cleaned.replace(/\s+/g, ' ').trim();
+      return cleaned;
+    }
+
     // --- Batching and Prompt Length Constants ---
     const MAX_PROMPT_LENGTH = 2048; // Truncate input text above this length
     const BATCH_SIZE = 5; // How many comments to batch per AI call
-
-    // Process comments with AI prompt
-    let allSongs: { title: string; artist: string }[] = [];
 
     // --- Step 1 & 2: Batching and Prompt Length Logging ---
     function logAndTruncate(text: string, label: string): string {
@@ -233,11 +245,38 @@ const parseYouTubeCommentFlow = ai.defineFlow<
       return text;
     }
 
-    // Helper to batch process comments
+    // --- Full-prompt batching: try to fit as many cleaned comments as possible in one prompt ---
+    const commentTexts = commentsData.map(item => cleanComment(item.text)).filter(Boolean);
+    let batches: string[][] = [];
+    let currentBatch: string[] = [];
+    let currentLength = 0;
+    for (const comment of commentTexts) {
+      const toAdd = `Comment ${currentBatch.length + 1}:\n${comment}\n---\n`;
+      if (currentLength + toAdd.length > MAX_PROMPT_LENGTH && currentBatch.length > 0) {
+        batches.push(currentBatch);
+        currentBatch = [];
+        currentLength = 0;
+      }
+      currentBatch.push(comment);
+      currentLength += toAdd.length;
+    }
+    if (currentBatch.length > 0) batches.push(currentBatch);
+
+    // --- Helper to batch process comments with AI caching ---
     async function processCommentBatch(comments: string[]): Promise<{ title: string; artist: string }[]> {
-      // Concatenate comments for a single prompt, separated by markers
       const joined = comments.map((c, i) => `Comment ${i + 1}:\n${c}`).join('\n---\n');
       const truncated = logAndTruncate(joined, `Batch of ${comments.length} comments`);
+      const hash = truncated; // Simple cache key (could hash for more robustness)
+      const cached = await redis.get(hash);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed.songs)) {
+            console.log(`[parseYouTubeCommentFlow] AI cache hit for batch.`);
+            return parsed.songs;
+          }
+        } catch {}
+      }
       const promptStart = Date.now();
       let result;
       try {
@@ -251,17 +290,18 @@ const parseYouTubeCommentFlow = ai.defineFlow<
       aiPromptTotalTime += promptDuration;
       console.log(`[parseYouTubeCommentFlow] AI prompt duration for batch: ${promptDuration} ms`);
       if (result.output?.songs && result.output.songs.length > 0) {
+        await redis.set(hash, JSON.stringify({ songs: result.output.songs }), 'EX', 60 * 60 * 24);
         return result.output.songs;
       }
+      await redis.set(hash, JSON.stringify({ songs: [] }), 'EX', 60 * 60 * 24);
       return [];
     }
 
-    // --- Step 2: Batching logic ---
+    let allSongs: { title: string; artist: string }[] = [];
+
+    // --- Step 2: Full-prompt batching logic ---
     if (input.prioritizePinnedComments) {
-      // Collect all comment texts
-      const commentTexts = commentsData.map(item => item.text).filter(Boolean);
-      for (let i = 0; i < commentTexts.length; i += BATCH_SIZE) {
-        const batch = commentTexts.slice(i, i + BATCH_SIZE);
+      for (const batch of batches) {
         if (batch.length === 0) continue;
         try {
           const songs = await processCommentBatch(batch);
@@ -279,15 +319,31 @@ const parseYouTubeCommentFlow = ai.defineFlow<
     // If description scanning is enabled, process it as well
     if (input.scanDescription && descriptionText) {
       try {
-        const truncatedDesc = logAndTruncate(descriptionText, 'Description');
-        const promptStart = Date.now();
-        const result = await parseCommentPrompt({ commentText: truncatedDesc });
-        const promptDuration = Date.now() - promptStart;
-        aiPromptCount++;
-        aiPromptTotalTime += promptDuration;
-        console.log(`[parseYouTubeCommentFlow] AI prompt duration for description: ${promptDuration} ms`);
-        if (result.output?.songs && result.output.songs.length > 0) {
-          allSongs = allSongs.concat(result.output.songs);
+        const cleanedDesc = cleanComment(descriptionText);
+        const truncatedDesc = logAndTruncate(cleanedDesc, 'Description');
+        const hash = truncatedDesc;
+        let descSongs: { title: string; artist: string }[] = [];
+        const cached = await redis.get(hash);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed.songs)) {
+              console.log(`[parseYouTubeCommentFlow] AI cache hit for description.`);
+              descSongs = parsed.songs;
+            }
+          } catch {}
+        } else {
+          const promptStart = Date.now();
+          const result = await parseCommentPrompt({ commentText: truncatedDesc });
+          const promptDuration = Date.now() - promptStart;
+          aiPromptCount++;
+          aiPromptTotalTime += promptDuration;
+          console.log(`[parseYouTubeCommentFlow] AI prompt duration for description: ${promptDuration} ms`);
+          descSongs = result.output?.songs || [];
+          await redis.set(hash, JSON.stringify({ songs: descSongs }), 'EX', 60 * 60 * 24);
+        }
+        if (descSongs.length > 0) {
+          allSongs = allSongs.concat(descSongs);
         }
       } catch (error) {
         console.error(`[parseYouTubeCommentFlow] Error processing description:`, error);
@@ -299,22 +355,27 @@ const parseYouTubeCommentFlow = ai.defineFlow<
 
     // Deduplicate songs based on title and artist
     const uniqueSongs = Array.from(new Map(
-      allSongs.map(song => [`${song.title}-${song.artist}`, song])
-    ).values());
+      allSongs.map((song: { title: string; artist: string }) => [`${song.title}-${song.artist}`, song])
+    ).values()) as { title: string; artist: string }[];
     console.log(`[parseYouTubeCommentFlow] Unique songs found: ${uniqueSongs.length}`);
 
-    // Fetch album images for each song (if available)
-    const songsWithImages = await Promise.all(uniqueSongs.map(async (song) => {
-      try {
-        const imageUrl = await getTrackAlbumArt(song.title, song.artist);
-        return { ...song, imageUrl: imageUrl || undefined };
-      } catch (error) {
-        console.error(`[parseYouTubeCommentFlow] Error fetching album art for ${song.title} by ${song.artist}:`, error);
-        return song;
+    // --- Async album art fetching: return results immediately, fetch album art in background ---
+    // Instead of waiting for album art, return songs with imageUrl: null, and trigger background fetch (pseudo, see below)
+    const songsWithImages = await Promise.all(uniqueSongs.map(async (song: { title: string; artist: string }) => {
+      const key = `albumArt:${song.title}|||${song.artist}`;
+      let imageUrl: string | null = await redis.get(key);
+      if (!imageUrl) {
+        // Fire and forget async fetch
+        getTrackAlbumArt(song.title, song.artist).then(url => {
+          if (url) {
+            redis.set(key, url, 'EX', 60 * 60 * 24); // Cache for 24 hours
+          }
+        });
       }
+      return { ...song, imageUrl };
     }));
 
-    console.log(`[parseYouTubeCommentFlow] Returning ${songsWithImages.length} unique songs.`);
+    console.log(`[parseYouTubeCommentFlow] Returning ${songsWithImages.length} unique songs (album art may load async).`);
     if (songsWithImages.length === 0) {
       console.log('[parseYouTubeCommentFlow] No songs identified in the comments or description.');
     }

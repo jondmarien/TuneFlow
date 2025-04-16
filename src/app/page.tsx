@@ -230,6 +230,15 @@ export default function Home() {
   }
 
   const handleParseComments = async () => {
+    if (spotifyConnected !== true) {
+      toast({
+        title: 'Spotify Login Required',
+        description: 'Please connect to Spotify before parsing comments.',
+        variant: 'destructive',
+        position: 'top-left',
+      });
+      return;
+    }
     console.log('handleParseComments started');
     if (!youtubeLink) {
       console.warn('YouTube link missing');
@@ -519,7 +528,7 @@ export default function Home() {
               </div>
               <Button
                 onClick={handleParseComments}
-                disabled={loading || !youtubeLink}
+                disabled={loading || !youtubeLink || spotifyConnected !== true}
                 className="w-full rounded-md bg-blue-400 hover:bg-blue-500 text-white font-semibold shadow"
               >
                 {loading && parsingState === 'Fetching & Parsing Comments / Description' ? (
