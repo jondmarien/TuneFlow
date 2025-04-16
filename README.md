@@ -25,6 +25,22 @@ TuneFlow is an AI-powered playlist generator that seamlessly integrates YouTube 
 
 ---
 
+## 🚧 Future Implementations
+
+Here are some ideas and plans for expanding TuneFlow in the future:
+
+- 🎧 **SoundCloud API Integration**
+  - Add support for SoundCloud tracks, especially for songs not available on Spotify.
+  - Possibility to create YouTube playlists directly from parsed tracks.
+- 🍏 **Apple Music API**
+  - Explore adding Apple Music integration for broader playlist export options.
+- 🧠 **Advanced Song Detection**
+  - Create a new branch to find songs in videos even if there is no tracklist in the description, comments, or pinned comments—using AI and audio analysis.
+
+Have more ideas? Feel free to open an issue or submit a pull request!
+
+---
+
 ## 🛠️ Tech Stack
 
 - [Next.js](https://nextjs.org/) – React framework for building web applications
@@ -99,3 +115,5 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 - Inspired by the power of open music and AI.
 - Built with ❤️ by the TuneFlow community.
+
+---
