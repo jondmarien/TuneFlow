@@ -36,6 +36,7 @@ export default function Home() {
   const [spotifyUserId, setSpotifyUserId] = useState("");
   const [prioritizePinned, setPrioritizePinned] = useState(false);
   const [scanDescription, setScanDescription] = useState(false);
+  const [spotifyConnected, setSpotifyConnected] = useState<boolean | null>(null);
   const { toast } = useToast();
   const [spotifyReady, setSpotifyReady] = useState(true); // Assume ready for basic search initially
   const [parsingState, setParsingState] = useState<string | null>(null); // More specific state tracking
@@ -43,6 +44,13 @@ export default function Home() {
 
   useEffect(() => {
     console.warn('Spotify Auth Note: Using backend Client Credentials. Playlist creation requires user authorization (Authorization Code Flow) and might fail.');
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/spotify/me')
+      .then(res => res.json())
+      .then(data => setSpotifyConnected(data.connected))
+      .catch(() => setSpotifyConnected(false));
   }, []);
 
   const handleParseComments = async () => {
@@ -265,14 +273,20 @@ export default function Home() {
 
             {/* Spotify Connect Section */}
             <div className="w-full flex justify-center my-4">
-              <Button
-                onClick={() => {
-                  window.location.href = '/api/spotify/login';
-                }}
-                className="rounded-md bg-green-700 text-white hover:bg-green-800"
-              >
-                Connect to Spotify
-              </Button>
+              {spotifyConnected === null ? (
+                <span className="text-gray-500">Checking Spotify status...</span>
+              ) : spotifyConnected ? (
+                <span className="rounded px-4 py-2 bg-green-100 text-green-800 font-semibold">CONNECTED!</span>
+              ) : (
+                <Button
+                  onClick={() => {
+                    window.location.href = '/api/spotify/login';
+                  }}
+                  className="rounded-md bg-green-700 text-white hover:bg-green-800"
+                >
+                  Connect to Spotify
+                </Button>
+              )}
             </div>
 
             {/* Spotify Playlist Creation Section - Enabled after successful parsing */}
