@@ -487,10 +487,10 @@ export default function Home() {
                 disabled={loading || !youtubeLink}
                 className="w-full rounded-md bg-blue-400 hover:bg-blue-500 text-white font-semibold shadow"
               >
-                {loading && parsingState === 'Fetching & Parsing Comments' ? (
+                {loading && parsingState === 'Fetching & Parsing Comments / Description' ? (
                   <span className="flex items-center"><Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Parsing...</span>
                 ) : (
-                  'Parse YouTube Comments'
+                  'Parse YouTube Video Information'
                 )}
               </Button>
             </div>

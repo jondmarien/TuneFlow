@@ -20,7 +20,9 @@ async function getAccessToken(): Promise<string> {
 
   try {
     const data = await spotifyApi.clientCredentialsGrant();
+    console.log('Raw clientCredentialsGrant response:', data);
     accessToken = data.body.access_token;
+    console.log('Received access token:', accessToken);
     tokenExpiry = Date.now() + (data.body.expires_in * 1000);
     spotifyApi.setAccessToken(accessToken);
     return accessToken;
