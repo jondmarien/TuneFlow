@@ -141,6 +141,7 @@ const parseYouTubeCommentFlow = ai.defineFlow<
 
       try {
         // Call the backend API route using the absolute URL
+        const fetchStart = Date.now();
         console.log(`[parseYouTubeCommentFlow] Calling fetch with videoId: ${videoId}`);
         const response = await fetch(apiUrl, { // Use the absolute URL
           method: 'POST',
@@ -149,7 +150,8 @@ const parseYouTubeCommentFlow = ai.defineFlow<
           },
           body: JSON.stringify({ videoId }),
         });
-
+        const fetchDuration = Date.now() - fetchStart;
+        console.log(`[parseYouTubeCommentFlow] Fetch duration: ${fetchDuration} ms`);
         console.log(`[parseYouTubeCommentFlow] Fetch response status: ${response.status}`);
         const responseBody = await response.text(); // Read body as text first for better debugging
 
@@ -209,6 +211,9 @@ const parseYouTubeCommentFlow = ai.defineFlow<
     }
 
     console.log(`[parseYouTubeCommentFlow] Processing ${commentsData.length} comment items with AI prompt...`);
+    const aiStart = Date.now();
+    let aiPromptCount = 0;
+    let aiPromptTotalTime = 0;
 
     // Process comments with AI prompt
     let allSongs: { title: string; artist: string }[] = [];
@@ -218,7 +223,12 @@ const parseYouTubeCommentFlow = ai.defineFlow<
         const commentText = item.text;
         if (commentText) {
           try {
+            const promptStart = Date.now();
             const result = await parseCommentPrompt({ commentText });
+            const promptDuration = Date.now() - promptStart;
+            aiPromptCount++;
+            aiPromptTotalTime += promptDuration;
+            console.log(`[parseYouTubeCommentFlow] AI prompt duration for comment: ${promptDuration} ms`);
             if (result.output?.songs && result.output.songs.length > 0) {
               allSongs = allSongs.concat(result.output.songs);
               // Stop processing further comments if we have a significant tracklist (5 or more songs)
@@ -237,7 +247,12 @@ const parseYouTubeCommentFlow = ai.defineFlow<
     // If description scanning is enabled, process it as well
     if (input.scanDescription && descriptionText) {
       try {
+        const promptStart = Date.now();
         const result = await parseCommentPrompt({ commentText: descriptionText });
+        const promptDuration = Date.now() - promptStart;
+        aiPromptCount++;
+        aiPromptTotalTime += promptDuration;
+        console.log(`[parseYouTubeCommentFlow] AI prompt duration for description: ${promptDuration} ms`);
         if (result.output?.songs && result.output.songs.length > 0) {
           allSongs = allSongs.concat(result.output.songs);
         }
@@ -246,10 +261,14 @@ const parseYouTubeCommentFlow = ai.defineFlow<
       }
     }
 
+    const aiTotalDuration = Date.now() - aiStart;
+    console.log(`[parseYouTubeCommentFlow] AI summary: ${aiPromptCount} prompt calls, total AI time: ${aiPromptTotalTime} ms, avg: ${aiPromptCount ? (aiPromptTotalTime / aiPromptCount).toFixed(2) : 0} ms/call, total elapsed: ${aiTotalDuration} ms`);
+
     // Deduplicate songs based on title and artist
     const uniqueSongs = Array.from(new Map(
       allSongs.map(song => [`${song.title}-${song.artist}`, song])
     ).values());
+    console.log(`[parseYouTubeCommentFlow] Unique songs found: ${uniqueSongs.length}`);
 
     // Fetch album images for each song (if available)
     const songsWithImages = await Promise.all(uniqueSongs.map(async (song) => {
