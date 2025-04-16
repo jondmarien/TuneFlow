@@ -10,13 +10,13 @@ const youtube = google.youtube({
 // API route to fetch YouTube comments
 export async function POST(req: Request) {
   try {
-    const { videoId } = await req.json();
+    const { videoId, maxComments } = await req.json();
 
     if (!videoId) {
       return NextResponse.json({ error: 'Video ID is required' }, { status: 400 });
     }
 
-    // Fetch comments from YouTube API with pagination
+    // Fetch comments from YouTube API
     interface Comment {
       id: string | null | undefined;
       author: string | null | undefined;
@@ -24,35 +24,31 @@ export async function POST(req: Request) {
       publishedAt: string | null | undefined;
     }
     let allComments: Comment[] = [];
-    let nextPageToken = '';
-    do {
-      const response = await youtube.commentThreads.list({
-        part: ['snippet'],
-        videoId: videoId,
-        maxResults: 100,
-        textFormat: 'plainText',
-        pageToken: nextPageToken || undefined,
-      });
+    // Only fetch the first page of comments
+    const response = await youtube.commentThreads.list({
+      part: ['snippet'],
+      videoId: videoId,
+      maxResults: 100,
+      textFormat: 'plainText',
+    });
 
-      console.log('YouTube API Response:', {
-        totalResults: response.data.pageInfo?.totalResults,
-        resultsPerPage: response.data.pageInfo?.resultsPerPage,
-        nextPageToken: response.data.nextPageToken,
-        itemsLength: response.data.items?.length
-      });
+    console.log('YouTube API Response:', {
+      totalResults: response.data.pageInfo?.totalResults,
+      resultsPerPage: response.data.pageInfo?.resultsPerPage,
+      nextPageToken: response.data.nextPageToken,
+      itemsLength: response.data.items?.length
+    });
 
-      const comments = response.data.items?.map(item => ({
-        id: item.id,
-        author: item.snippet?.topLevelComment?.snippet?.authorDisplayName,
-        text: item.snippet?.topLevelComment?.snippet?.textDisplay,
-        publishedAt: item.snippet?.topLevelComment?.snippet?.publishedAt,
-      })) || [];
+    const comments = response.data.items?.map(item => ({
+      id: item.id,
+      author: item.snippet?.topLevelComment?.snippet?.authorDisplayName,
+      text: item.snippet?.topLevelComment?.snippet?.textDisplay,
+      publishedAt: item.snippet?.topLevelComment?.snippet?.publishedAt,
+    })) || [];
 
-      console.log('Processed comments length for this page:', comments.length);
+    console.log('Processed comments length for this page:', comments.length);
 
-      allComments = allComments.concat(comments);
-      nextPageToken = response.data.nextPageToken || '';
-    } while (nextPageToken && allComments.length < 500); // Limit to 500 comments to avoid excessive API calls
+    allComments = comments;
 
     console.log('Total processed comments:', allComments.length);
 
