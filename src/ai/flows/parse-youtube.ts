@@ -169,8 +169,14 @@ const parseYouTubeCommentFlow = ai.defineFlow<
             throw new Error('Failed to parse response from backend API.');
         }
 
-        console.log(`[parseYouTubeCommentFlow] Received ${data?.items?.length || 0} comment items from API.`);
-        commentsData = data.items || []; // Extract comment items
+        console.log(`[parseYouTubeCommentFlow] Received ${data?.comments?.length || 0} comment items from API.`);
+        commentsData = data.comments || []; // Extract comment items
+        if (commentsData.length > 0) {
+          console.log('[parseYouTubeCommentFlow] Sample comments (first 5):');
+          commentsData.slice(0, 5).forEach((comment, index) => {
+            console.log(`Comment ${index + 1}:`, comment.text || 'No text available');
+          });
+        }
 
       } catch (error) {
         console.error('[parseYouTubeCommentFlow] Error calling backend API route or processing response:', error);
@@ -200,52 +206,50 @@ const parseYouTubeCommentFlow = ai.defineFlow<
         throw new Error('Invalid input: Please provide a YouTube video URL (e.g., https://www.youtube.com/watch?v=...).');
     }
 
-    const songs: { title: string; artist: string; }[] = [];
-    // If descriptionText is present, parse it for songs
-    if (descriptionText) {
-      try {
-        const {output} = await parseCommentPrompt({ commentText: descriptionText });
-        if (output?.songs) {
-          const validSongs = output.songs.filter(s => s.title && s.artist && s.title !== 'Unknown' && s.artist !== 'Unknown');
-          if (validSongs.length > 0) {
-            songs.push(...validSongs);
+    console.log(`[parseYouTubeCommentFlow] Processing ${commentsData.length} comment items with AI prompt...`);
+
+    // Process comments with AI prompt
+    let allSongs: { title: string; artist: string }[] = [];
+    for (const item of commentsData) {
+      const commentText = item.text;
+      if (commentText) {
+        try {
+          const result = await parseCommentPrompt({ commentText });
+          if (result.output?.songs && result.output.songs.length > 0) {
+            allSongs = allSongs.concat(result.output.songs);
+            // Stop processing further comments if we have a significant tracklist (5 or more songs)
+            if (result.output.songs.length >= 5) {
+              console.log(`[parseYouTubeCommentFlow] Detected a tracklist with ${result.output.songs.length} songs. Stopping further comment processing.`);
+              break;
+            }
           }
+        } catch (error) {
+          console.error(`[parseYouTubeCommentFlow] Error processing comment:`, error);
         }
-      } catch (descPromptErr) {
-        console.error('[parseYouTubeCommentFlow] Error processing description with AI prompt:', descPromptErr);
       }
     }
 
-    // Process comments fetched from the API route
-    console.log(`[parseYouTubeCommentFlow] Processing ${commentsData.length} comment items with AI prompt...`);
-    for (const item of commentsData) {
-        const commentText = item?.snippet?.topLevelComment?.snippet?.textDisplay;
-        if (commentText) {
-            try {
-                 const {output} = await parseCommentPrompt({ commentText });
-                 if (output?.songs) {
-                    // Filter out empty/invalid entries from the tool
-                    const validSongs = output.songs.filter(s => s.title && s.artist && s.title !== 'Unknown' && s.artist !== 'Unknown');
-                    if (validSongs.length > 0) {
-                        console.log(`[parseYouTubeCommentFlow] Extracted songs from comment:`, validSongs);
-                        songs.push(...validSongs);
-                    }
-                 }
-            } catch (promptError) {
-                console.error('[parseYouTubeCommentFlow] Error processing comment with AI prompt:', promptError, 'Comment text:', commentText);
-                // Skip this comment on error
-            }
+    // If description scanning is enabled, process it as well
+    if (input.scanDescription && descriptionText) {
+      try {
+        const result = await parseCommentPrompt({ commentText: descriptionText });
+        if (result.output?.songs && result.output.songs.length > 0) {
+          allSongs = allSongs.concat(result.output.songs);
         }
+      } catch (error) {
+        console.error(`[parseYouTubeCommentFlow] Error processing description:`, error);
+      }
     }
 
-    // Deduplicate songs
-    const uniqueSongs = songs.filter((song, index, self) =>
-        index === self.findIndex((s) => (
-            s.title.toLowerCase() === song.title.toLowerCase() &&
-            s.artist.toLowerCase() === song.artist.toLowerCase()
-        ))
-    );
+    // Deduplicate songs based on title and artist
+    const uniqueSongs = Array.from(new Map(
+      allSongs.map(song => [`${song.title}-${song.artist}`, song])
+    ).values());
+
     console.log(`[parseYouTubeCommentFlow] Returning ${uniqueSongs.length} unique songs.`);
+    if (uniqueSongs.length === 0) {
+      console.log('[parseYouTubeCommentFlow] No songs identified in the comments or description.');
+    }
 
     return { songs: uniqueSongs };
   }
