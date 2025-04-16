@@ -42,6 +42,8 @@ export default function Home() {
   const [spotifyReady, setSpotifyReady] = useState(true); // Assume ready for basic search initially
   const [parsingState, setParsingState] = useState<string | null>(null); // More specific state tracking
   const [canCreatePlaylist, setCanCreatePlaylist] = useState(false);
+  const [abortPlaylist, setAbortPlaylist] = useState(false);
+  const [playlistAbortController, setPlaylistAbortController] = useState<AbortController | null>(null);
 
   useEffect(() => {
     console.warn('Spotify Auth Note: Using backend Client Credentials. Playlist creation requires user authorization (Authorization Code Flow) and might fail.');
@@ -150,13 +152,13 @@ export default function Home() {
   async function generateAiPlaylistName(songs: Song[]): Promise<string> {
     if (!songs.length) return "AI Playlist";
     const genres = await fetchSpotifyGenres();
-    if (!genres.length) return "AI Playlist";
+    if (!genres.length) throw new Error('Failed to fetch genres from Spotify. Playlist creation aborted.');
     // Optionally, analyze songs for genre
     return `AI ${genres[Math.floor(Math.random() * genres.length)]} Mix`;
   }
 
   // Helper to search Spotify for a track URI
-  async function searchSpotifyTrackUri(song: Song): Promise<string | null> {
+  async function searchSpotifyTrackUri(song: Song, signal?: AbortSignal): Promise<string | null> {
     if (!spotifyConnected) {
       toast({
         title: 'Spotify Login Required',
@@ -171,7 +173,8 @@ export default function Home() {
       const res = await fetch('/api/spotify/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q: query })
+        body: JSON.stringify({ q: query }),
+        signal,
       });
       if (!res.ok) {
         const data = await res.json();
@@ -186,6 +189,7 @@ export default function Home() {
       const data = await res.json();
       return data.track?.uri || null;
     } catch (err: any) {
+      if (err.name === 'AbortError') return null;
       toast({
         title: 'Spotify Search Error',
         description: err.message || 'Could not search for song on Spotify.',
@@ -257,6 +261,9 @@ export default function Home() {
   };
 
   const handleCreatePlaylist = async () => {
+    setAbortPlaylist(false);
+    const abortController = new AbortController();
+    setPlaylistAbortController(abortController);
     console.log('handleCreatePlaylist started');
     if (!spotifyConnected) {
       toast({ title: 'Spotify Login Required', description: 'Please connect your Spotify account before creating a playlist.', variant: 'destructive', position: 'top-left' });
@@ -282,19 +289,20 @@ export default function Home() {
           finalPlaylistName = `YouTube Playlist`;
         }
       } else {
-        // Use AI-generated name
+        // Use AI-generated name, but fail if genres can't be fetched
         finalPlaylistName = await generateAiPlaylistName(songs);
       }
       setPlaylistName(finalPlaylistName);
       // Find Spotify track URIs for all parsed songs
       let trackUris: string[] = [];
       for (const song of songs) {
-        const uri = await searchSpotifyTrackUri(song);
+        if (abortPlaylist) throw new Error('Playlist creation stopped by user.');
+        const uri = await searchSpotifyTrackUri(song, abortController.signal);
         if (uri) trackUris.push(uri);
       }
-
       // Fetch Spotify user ID
-      const userRes = await fetch('/api/spotify/me');
+      if (abortPlaylist) throw new Error('Playlist creation stopped by user.');
+      const userRes = await fetch('/api/spotify/me', { signal: abortController.signal });
       const userData = await userRes.json();
       if (!userData.id) {
         playlistToast.update({
@@ -309,8 +317,8 @@ export default function Home() {
         return;
       }
       const userId = userData.id;
-
       // --- Playlist Creation Request ---
+      if (abortPlaylist) throw new Error('Playlist creation stopped by user.');
       const createResponse = await fetch('/api/spotify/playlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -319,6 +327,7 @@ export default function Home() {
           playlistName: finalPlaylistName,
           trackUris,
         }),
+        signal: abortController.signal,
       });
       let createData;
       let createIsJson = false;
@@ -344,8 +353,9 @@ export default function Home() {
         });
         throw new Error(errorMessage);
       } else {
-        // Show green, non-fading toast with playlist URL
-        playlistToast.update({
+        playlistToast.dismiss();
+         // Show green, non-fading toast with playlist URL
+         playlistToast.update({
           id: playlistToast.id,
           title: 'Playlist Created!',
           description: (
@@ -384,19 +394,49 @@ export default function Home() {
         }
       }
     } catch (error: any) {
-      console.error("Error during handleCreatePlaylist:", error);
-      playlistToast.update({
-        id: playlistToast.id,
-        title: "Playlist Creation Failed",
-        description: error.message || "An unexpected error occurred.",
-        variant: "destructive",
-        position: 'top-left',
-      });
+      if (error.name === 'AbortError' || error.message === 'Playlist creation stopped by user.') {
+        toast({
+          title: 'Playlist Creation Stopped',
+          description: 'Playlist creation was aborted by the user.',
+          variant: 'destructive',
+          position: 'top-left',
+        });
+      } else {
+        console.error("Error during handleCreatePlaylist:", error);
+        toast({
+          title: "Playlist Creation Failed",
+          description: error.message || "An unexpected error occurred.",
+          variant: "destructive",
+          position: 'top-left',
+        });
+      }
     } finally {
       setLoading(false);
       setParsingState(null);
+      setAbortPlaylist(false);
+      setPlaylistAbortController(null);
     }
   };
+
+  const handleStopPlaylist = () => {
+    if (playlistAbortController) {
+      playlistAbortController.abort();
+    }
+    setAbortPlaylist(true);
+  };
+
+  useEffect(() => {
+    if (abortPlaylist) {
+      setLoading(false);
+      setParsingState(null);
+      toast({
+        title: 'Playlist Creation Stopped',
+        description: 'Playlist creation was aborted by the user.',
+        variant: 'destructive',
+        position: 'top-left',
+      });
+    }
+  }, [abortPlaylist]);
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen p-4 bg-background text-foreground">
@@ -445,15 +485,12 @@ export default function Home() {
               <Button
                 onClick={handleParseComments}
                 disabled={loading || !youtubeLink}
-                className="w-full rounded-md"
+                className="w-full rounded-md bg-blue-400 hover:bg-blue-500 text-white font-semibold shadow"
               >
                 {loading && parsingState === 'Fetching & Parsing Comments' ? (
-                  <>
-                    <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                    {parsingState}
-                  </>
+                  <span className="flex items-center"><Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Parsing...</span>
                 ) : (
-                  "Parse YouTube Comments"
+                  'Parse YouTube Comments'
                 )}
               </Button>
             </div>
@@ -506,6 +543,15 @@ export default function Home() {
                   useAiPlaylistName ? "Create AI-Named Playlist" : "Create Spotify Playlist"
                 )}
               </Button>
+              {loading && parsingState === 'Finding Songs on Spotify' && (
+                <button
+                  onClick={handleStopPlaylist}
+                  className="w-full mt-2 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold flex items-center justify-center shadow"
+                  style={{ borderRadius: '0.75rem', backgroundColor: '#dc2626' }}
+                >
+                  <span style={{ fontWeight: 700, fontSize: '1.1rem' }}>■ STOP</span>
+                </button>
+              )}
             </div>
           )}
         </CardContent>

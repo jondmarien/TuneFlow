@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
-  const { q } = await req.json();
+  let q: string | undefined;
+  try {
+    const body = await req.json();
+    q = body.q;
+  } catch (e) {
+    return NextResponse.json({ error: 'Invalid or empty JSON body' }, { status: 400 });
+  }
+  if (!q || typeof q !== 'string' || !q.trim()) {
+    return NextResponse.json({ error: 'Missing or invalid query parameter "q".' }, { status: 400 });
+  }
   // req.cookies.get returns a RequestCookie | undefined, so extract the value
   const cookie = req.cookies.get('spotify_access_token');
   const accessToken: string | undefined = cookie ? cookie.value : undefined;
@@ -46,6 +55,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: errorMsg }, { status: res.status });
   }
   const data = await res.json();
-  const track = data.tracks?.items?.[0];
-  return NextResponse.json({ track });
+  return NextResponse.json({ track: data.tracks?.items?.[0] || null });
 }
