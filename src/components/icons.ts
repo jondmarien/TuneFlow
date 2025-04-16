@@ -1,4 +1,16 @@
+// --- Icon Exports ---
+
+/**
+ * Centralized icon exports using Lucide React icons.
+ *
+ * Provides a mapping of icon names to Lucide React components for consistent icon usage across the app.
+ */
+
 import {ArrowRight, Check, ChevronsUpDown, Circle, Copy, Edit, ExternalLink, File, HelpCircle, Home, Loader2, Mail, MessageSquare, Moon, Plus, PlusCircle, Search, Server, Settings, Share2, Shield, Sun, Trash, User, X, Workflow} from 'lucide-react';
+
+/**
+ * Icon mapping object for use throughout the app.
+ */
 
 const Icons = {
   arrowRight: ArrowRight,
