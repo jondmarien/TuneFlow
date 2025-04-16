@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Icons } from "@/components/icons";
 import { parseYouTubeComment, ParseYouTubeCommentOutput } from "@/ai/flows/parse-youtube";
-import { generatePlaylistName } from '@/ai/flows/playlist-name';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 
@@ -149,22 +148,20 @@ export default function Home() {
     }
   }
 
-  // AI playlist name generation using Spotify genres and parsed songs
+  // Fallback AI playlist name generation using YouTube title or a static name
   async function generateAiPlaylistName(songs: Song[]): Promise<string> {
+    // Fallback: Use the YouTube video title or a static name
     if (!songs.length) return "AI Playlist";
-    const genres = await fetchSpotifyGenres();
-    if (!genres.length) throw new Error('Failed to fetch genres from Spotify. Playlist creation aborted.');
+    // Try to fetch YouTube title for a more descriptive fallback
+    // (Assume getYoutubeVideoId and fetchYoutubeTitle exist in the file)
     try {
-      const response = await generatePlaylistName({ genres, songs });
-      // Support for Genkit's GenerateResponse type
-      if (typeof response === 'object' && response !== null && 'output' in response && response.output && typeof response.output === 'object' && 'name' in response.output) {
-        return response.output.name || `AI ${genres[Math.floor(Math.random() * genres.length)]} Mix`;
+      const videoId = getYoutubeVideoId(youtubeLink);
+      if (videoId) {
+        const ytTitle = await fetchYoutubeTitle(videoId);
+        if (ytTitle) return ytTitle + " Playlist";
       }
-      return `AI ${genres[Math.floor(Math.random() * genres.length)]} Mix`;
-    } catch (e: any) {
-      console.error('AI playlist name generation failed:', e);
-      return `AI ${genres[Math.floor(Math.random() * genres.length)]} Mix`;
-    }
+    } catch {}
+    return "AI Playlist";
   }
 
   // Helper to search Spotify for a track URI

@@ -17,7 +17,7 @@ const PlaylistNameOutputSchema = z.object({
 
 export type PlaylistNameOutput = z.infer<typeof PlaylistNameOutputSchema>;
 
-export const generatePlaylistName = ai.definePrompt({
+/**export const generatePlaylistName = ai.definePrompt({
   name: 'generatePlaylistName',
   description: 'Creates a creative playlist name based on genres and song list.',
   input: PlaylistNameInputSchema,
@@ -31,3 +31,4 @@ export const generatePlaylistName = ai.definePrompt({
     ].filter(Boolean).join(' ')
   }]
 });
+**/
