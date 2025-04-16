@@ -29,13 +29,13 @@ TuneFlow is an AI-powered playlist generator that seamlessly integrates YouTube 
 
 Here are some ideas and plans for expanding TuneFlow in the future:
 
-- 🎧 **SoundCloud API Integration**
-  - Add support for SoundCloud tracks, especially for songs not available on Spotify.
-  - Possibility to create YouTube playlists directly from parsed tracks.
-- 🍏 **Apple Music API**
-  - Explore adding Apple Music integration for broader playlist export options.
-- 🧠 **Advanced Song Detection**
-  - Create a new branch to find songs in videos even if there is no tracklist in the description, comments, or pinned comments—using AI and audio analysis.
+| Feature                        | Status        | Notes                                                                                       |
+|------------------------------- |--------------|--------------------------------------------------------------------------------------------|
+| 🎧 SoundCloud API Integration  | ⏸️ Paused     | Backend implemented, but feature is paused until API keys/support resume after May 2.       |
+| ▶️ YouTube Playlist Creation   | 🛠️ In Progress| Possibility to create YouTube (and YT Music) playlists directly from parsed tracks.         |
+| 🍏 Apple Music API             | 🕒 Planned    | Explore adding Apple Music integration for broader playlist export options.                 |
+| 🧠 Advanced Song Detection     | 🕒 Planned    | Detect songs in videos even without tracklists in description/comments using AI/audio.      |
+| 🎼 YT Music Connection         | 🕒 Planned    | Explore connecting to YouTube Music for playlist creation if supported by YouTube.          |
 
 Have more ideas? Feel free to open an issue or submit a pull request!
 
