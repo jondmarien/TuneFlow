@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Icons } from "@/components/icons";
 import { parseYouTubeComment, ParseYouTubeCommentOutput } from "@/ai/flows/parse-youtube";
+import { generatePlaylistName } from '@/ai/flows/playlist-name';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 
@@ -124,12 +125,12 @@ export default function Home() {
   // Fetch genres from Spotify API
   async function fetchSpotifyGenres(): Promise<string[]> {
     try {
-      const res = await fetch('/api/spotify/genres');
+      const res = await fetch('/api/spotify/categories');
       if (!res.ok) {
         const data = await res.json();
         toast({
-          title: 'Spotify Genres Error',
-          description: data.error || 'Could not fetch genres from Spotify.',
+          title: 'Spotify Categories Error',
+          description: data.error || 'Could not fetch categories from Spotify.',
           variant: 'destructive',
           position: 'top-left',
         });
@@ -139,8 +140,8 @@ export default function Home() {
       return data.genres || [];
     } catch (err: any) {
       toast({
-        title: 'Spotify Genres Error',
-        description: err.message || 'Could not fetch genres from Spotify.',
+        title: 'Spotify Categories Error',
+        description: err.message || 'Could not fetch categories from Spotify.',
         variant: 'destructive',
         position: 'top-left',
       });
@@ -148,13 +149,22 @@ export default function Home() {
     }
   }
 
-  // AI playlist name generation using Spotify genres
+  // AI playlist name generation using Spotify genres and parsed songs
   async function generateAiPlaylistName(songs: Song[]): Promise<string> {
     if (!songs.length) return "AI Playlist";
     const genres = await fetchSpotifyGenres();
     if (!genres.length) throw new Error('Failed to fetch genres from Spotify. Playlist creation aborted.');
-    // Optionally, analyze songs for genre
-    return `AI ${genres[Math.floor(Math.random() * genres.length)]} Mix`;
+    try {
+      const response = await generatePlaylistName({ genres, songs });
+      // Support for Genkit's GenerateResponse type
+      if (typeof response === 'object' && response !== null && 'output' in response && response.output && typeof response.output === 'object' && 'name' in response.output) {
+        return response.output.name || `AI ${genres[Math.floor(Math.random() * genres.length)]} Mix`;
+      }
+      return `AI ${genres[Math.floor(Math.random() * genres.length)]} Mix`;
+    } catch (e: any) {
+      console.error('AI playlist name generation failed:', e);
+      return `AI ${genres[Math.floor(Math.random() * genres.length)]} Mix`;
+    }
   }
 
   // Helper to search Spotify for a track URI
