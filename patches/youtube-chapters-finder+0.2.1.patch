@@ -1,0 +1,31 @@
+diff --git a/node_modules/youtube-chapters-finder/dist/index.js b/node_modules/youtube-chapters-finder/dist/index.js
+index a0ce501..ca8e310 100644
+--- a/node_modules/youtube-chapters-finder/dist/index.js
++++ b/node_modules/youtube-chapters-finder/dist/index.js
+@@ -20,7 +20,7 @@ class YoutubeChaptersGetter {
+                 return yield response.text();
+             }
+             catch (error) {
+-                console.error('getVideo err: ', error);
++                console.warn('[youtube-chapters-finder] Failed to fetch video HTML:', error && error.message ? error.message : error);
+             }
+         });
+     }
+@@ -43,7 +43,7 @@ class YoutubeChaptersGetter {
+             return ytInitialDataString;
+         }
+         catch (error) {
+-            console.error('getScript err: ', error);
++            console.warn('[youtube-chapters-finder] Failed to extract ytInitialData script:', error && error.message ? error.message : error);
+         }
+     }
+     getChapter(videoId) {
+@@ -67,7 +67,7 @@ class YoutubeChaptersGetter {
+                 return chapters;
+             }
+             catch (error) {
+-                console.error('getChapter err: ', error);
++                console.warn('[youtube-chapters-finder] Failed to extract chapters (macroMarkersListRenderer missing or changed):', error && error.message ? error.message : error);
+                 return [];
+             }
+         });
