@@ -12,9 +12,9 @@ import {z} from 'genkit';
 import { getTrackAlbumArt } from '@/services/spotify-service';
 import { redis } from '@/utils/redis';
 
-// --- Input and Output Schemas (Unchanged) ---
+// --- Input and Output Schemas ---
 const ParseYouTubeCommentInputSchema = z.object({
-  youtubeUrl: z.string().describe('The YouTube video URL.'), // Updated description: Only video URL is supported now
+  youtubeUrl: z.string().describe('The YouTube video URL.'), // Only video URL is supported now
   prioritizePinnedComments: z
     .boolean()
     .default(false)
@@ -23,6 +23,14 @@ const ParseYouTubeCommentInputSchema = z.object({
     .boolean()
     .default(false)
     .describe('Whether to scan the video description for song and artist info.'),
+  chapters: z.string().optional().describe('Chapters text extracted from YouTube video, if available.'),
+  comments: z.array(z.object({
+    id: z.string().nullable().optional(),
+    author: z.string().nullable().optional(),
+    text: z.string().nullable().optional(),
+    publishedAt: z.string().nullable().optional(),
+  })).optional().describe('Array of YouTube comment objects to process.'),
+  description: z.string().optional().describe('Video description text to process.'),
 });
 export type ParseYouTubeCommentInput = z.infer<typeof ParseYouTubeCommentInputSchema>;
 
@@ -37,12 +45,12 @@ const ParseYouTubeCommentOutputSchema = z.object({
 });
 export type ParseYouTubeCommentOutput = z.infer<typeof ParseYouTubeCommentOutputSchema>;
 
-// --- Public Function (Unchanged) ---
+// --- Public Function ---
 export async function parseYouTubeComment(input: ParseYouTubeCommentInput): Promise<ParseYouTubeCommentOutput> {
   return parseYouTubeCommentFlow(input);
 }
 
-// --- AI Tool Definition (Unchanged) ---
+// --- AI Tool Definition ---
 const extractSongInfo = ai.defineTool({
   name: 'extractSongInfo',
   description: 'Extracts song title and artist from a given text.',
@@ -78,7 +86,7 @@ async input => {
   }
 });
 
-// --- AI Prompt Definition (Unchanged) ---
+// --- AI Prompt Definition ---
 const parseCommentPrompt = ai.definePrompt({
   name: 'parseCommentPrompt',
   tools: [extractSongInfo],
@@ -107,7 +115,7 @@ const parseCommentPrompt = ai.definePrompt({
   `, // Ensure Handlebars syntax is used
 });
 
-// --- AI Flow Definition (UPDATED) ---
+// --- AI Flow Definition ---
 const parseYouTubeCommentFlow = ai.defineFlow<
   typeof ParseYouTubeCommentInputSchema,
   typeof ParseYouTubeCommentOutputSchema
@@ -127,6 +135,48 @@ const parseYouTubeCommentFlow = ai.defineFlow<
     const internalApiBaseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002';
     const apiUrl = `${internalApiBaseUrl}/api/youtube/comments`;
     console.log(`[parseYouTubeCommentFlow] Fetching comments from internal API: ${apiUrl}`);
+
+    // If chapters are provided, process those directly
+    if (input.chapters) {
+      // Treat chapters as a single batch for AI
+      const cleanedChapters = cleanComment(input.chapters);
+      const truncatedChapters = logAndTruncate(cleanedChapters, 'Chapters');
+      const hash = 'chapters:' + truncatedChapters;
+      let chapterSongs: { title: string; artist: string }[] = [];
+      const cached = await redis.get(hash);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed.songs)) {
+            console.log(`[parseYouTubeCommentFlow] AI cache hit for chapters.`);
+            chapterSongs = parsed.songs;
+          }
+        } catch {}
+      }
+      if (!chapterSongs.length) {
+        try {
+          const result = await parseCommentPrompt({ commentText: truncatedChapters });
+          if (result.output?.songs && result.output.songs.length > 0) {
+            chapterSongs = result.output.songs;
+            await redis.set(hash, JSON.stringify({ songs: chapterSongs }), 'EX', 60 * 60 * 24);
+          }
+        } catch (error) {
+          console.error(`[parseYouTubeCommentFlow] Error processing chapters:`, error);
+        }
+      }
+      // Return early if chapters were processed
+      const songsWithImages = await Promise.all(chapterSongs.map(async (song: { title: string; artist: string }) => {
+        const key = `albumArt:${song.title}|||${song.artist}`;
+        let imageUrl: string | null = await redis.get(key);
+        if (!imageUrl) {
+          getTrackAlbumArt(song.title, song.artist).then(url => {
+            if (url) redis.set(key, url, 'EX', 60 * 60 * 24);
+          });
+        }
+        return { ...song, imageUrl: imageUrl ?? undefined };
+      }));
+      return { songs: songsWithImages };
+    }
 
     // Only handle video URLs as per the current API route
     if (input.youtubeUrl.includes('watch?v=')) {
@@ -372,7 +422,7 @@ const parseYouTubeCommentFlow = ai.defineFlow<
           }
         });
       }
-      return { ...song, imageUrl };
+      return { ...song, imageUrl: imageUrl ?? undefined };
     }));
 
     console.log(`[parseYouTubeCommentFlow] Returning ${songsWithImages.length} unique songs (album art may load async).`);
