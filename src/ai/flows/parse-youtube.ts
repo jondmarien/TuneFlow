@@ -8,12 +8,12 @@
  */
 
 import {ai} from '@/ai/ai-instance';
-import {z} from 'genkit';
+import {z} from 'zod';
 import { getTrackAlbumArt } from '@/services/spotify-service';
 
-// --- Input and Output Schemas (Unchanged) ---
+// --- Input and Output Schemas (Zod 4) ---
 const ParseYouTubeCommentInputSchema = z.object({
-  youtubeUrl: z.string().describe('The YouTube video URL.'), // Updated description: Only video URL is supported now
+  youtubeUrl: z.string().describe('The YouTube video URL.').meta({ example: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }),
   prioritizePinnedComments: z
     .boolean()
     .default(false)
@@ -22,18 +22,18 @@ const ParseYouTubeCommentInputSchema = z.object({
     .boolean()
     .default(false)
     .describe('Whether to scan the video description for song and artist info.'),
-});
+}).meta({ title: 'ParseYouTubeCommentInput' });
 export type ParseYouTubeCommentInput = z.infer<typeof ParseYouTubeCommentInputSchema>;
 
+const SongSchema = z.object({
+  title: z.string().describe('The title of the song.').meta({ example: 'Blinding Lights' }),
+  artist: z.string().describe('The artist of the song.').meta({ example: 'The Weeknd' }),
+  imageUrl: z.union([z.string(), z.null()]).optional().describe('URL of the album art for the song.'),
+}).meta({ title: 'Song' });
+
 const ParseYouTubeCommentOutputSchema = z.object({
-  songs: z.array(
-    z.object({
-      title: z.string().describe('The title of the song.'),
-      artist: z.string().describe('The artist of the song.'),
-      imageUrl: z.union([z.string(), z.null()]).optional().describe('URL of the album art for the song.')
-    })
-  ).describe('The list of songs identified in the comments.'),
-});
+  songs: z.array(SongSchema).describe('The list of songs identified in the comments.'),
+}).meta({ title: 'ParseYouTubeCommentOutput' });
 export type ParseYouTubeCommentOutput = z.infer<typeof ParseYouTubeCommentOutputSchema>;
 
 // --- Public Function (Unchanged) ---
@@ -41,61 +41,49 @@ export async function parseYouTubeComment(input: ParseYouTubeCommentInput): Prom
   return parseYouTubeCommentFlow(input);
 }
 
-// --- AI Tool Definition (Unchanged) ---
+// --- AI Tool Definition (Zod 4) ---
 const extractSongInfo = ai.defineTool({
   name: 'extractSongInfo',
   description: 'Extracts song title and artist from a given text.',
-  inputSchema: z.object({
+  input: z.object({
     text: z.string().describe('The text to extract song information from.'),
-  }),
-  outputSchema: z.object({
-    title: z.string().describe('The title of the song.'),
-    artist: z.string().describe('The artist of the song.'),
-  }),
-},
-async input => {
-  // Basic extraction logic
-  const parts = input.text.split('-');
-  if (parts.length >= 2) {
-    return {
-      artist: parts[0].trim(),
-      title: parts[1].trim(),
-    };
-  } else {
-    // Consider patterns like "Song Title by Artist"
-    const byParts = input.text.split(/\s+by\s+/i);
-    if (byParts.length === 2) {
-       return {
-         title: byParts[0].trim(),
-         artist: byParts[1].trim(),
-       };
+  }).meta({ title: 'ExtractSongInfoInput' }),
+  output: SongSchema,
+  execute: async ({ text }: { text: string }) => {
+    // Basic extraction logic
+    const parts = text.split('-');
+    if (parts.length >= 2) {
+      return {
+        artist: parts[0].trim(),
+        title: parts[1].trim(),
+      };
+    } else {
+      // Consider patterns like "Song Title by Artist"
+      const byParts = text.split(/\s+by\s+/i);
+      if (byParts.length === 2) {
+         return {
+           title: byParts[0].trim(),
+           artist: byParts[1].trim(),
+         };
+      }
+      return {
+        artist: 'Unknown',
+        title: text.trim(),
+      };
     }
-    return {
-      artist: 'Unknown',
-      title: input.text.trim(),
-    };
-  }
+  },
 });
 
-// --- AI Prompt Definition (Unchanged) ---
+// --- AI Prompt Definition (Zod 4) ---
 const parseCommentPrompt = ai.definePrompt({
   name: 'parseCommentPrompt',
   tools: [extractSongInfo],
-  input: {
-    schema: z.object({
-      commentText: z.string().describe('The text content of the YouTube comment.'),
-    }),
-  },
-  output: {
-    schema: z.object({
-      songs: z.array(
-        z.object({
-          title: z.string().describe('The title of the song.'),
-          artist: z.string().describe('The artist of the song.'),
-        })
-      ).describe('The list of songs identified in the comments.'),
-    }),
-  },
+  input: z.object({
+    commentText: z.string().describe('The text content of the YouTube comment.'),
+  }).meta({ title: 'ParseCommentPromptInput' }),
+  output: z.object({
+    songs: z.array(SongSchema).describe('The list of songs identified in the comments.'),
+  }).meta({ title: 'ParseCommentPromptOutput' }),
   prompt: `You are an AI that extracts song titles and artists from YouTube comments.
 
   The user will provide a comment, and you will return a list of songs mentioned in the comment.
@@ -106,15 +94,15 @@ const parseCommentPrompt = ai.definePrompt({
   `, // Ensure Handlebars syntax is used
 });
 
-// --- AI Flow Definition (UPDATED) ---
+// --- AI Flow Definition (Zod 4) ---
 const parseYouTubeCommentFlow = ai.defineFlow<
   typeof ParseYouTubeCommentInputSchema,
   typeof ParseYouTubeCommentOutputSchema
 >(
   {
     name: 'parseYouTubeCommentFlow',
-    inputSchema: ParseYouTubeCommentInputSchema,
-    outputSchema: ParseYouTubeCommentOutputSchema,
+    input: ParseYouTubeCommentInputSchema,
+    output: ParseYouTubeCommentOutputSchema,
   },
   async input => {
     let commentsData: any[] = []; // Store raw comment items from API
@@ -218,7 +206,7 @@ const parseYouTubeCommentFlow = ai.defineFlow<
         const commentText = item.text;
         if (commentText) {
           try {
-            const result = await parseCommentPrompt({ commentText });
+            const result = await ai.runPrompt('parseCommentPrompt', { commentText });
             if (result.output?.songs && result.output.songs.length > 0) {
               allSongs = allSongs.concat(result.output.songs);
               // Stop processing further comments if we have a significant tracklist (5 or more songs)
@@ -237,7 +225,7 @@ const parseYouTubeCommentFlow = ai.defineFlow<
     // If description scanning is enabled, process it as well
     if (input.scanDescription && descriptionText) {
       try {
-        const result = await parseCommentPrompt({ commentText: descriptionText });
+        const result = await ai.runPrompt('parseCommentPrompt', { commentText: descriptionText });
         if (result.output?.songs && result.output.songs.length > 0) {
           allSongs = allSongs.concat(result.output.songs);
         }
