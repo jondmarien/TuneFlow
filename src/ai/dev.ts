@@ -1,1 +1,1 @@
-import '@/ai/flows/parse-youtube-comment.ts';
+import '@/ai/flows/parse-youtube';

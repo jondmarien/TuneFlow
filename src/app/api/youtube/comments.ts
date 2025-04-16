@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
 
   // Construct the correct API URL for comments
   // Note: YouTube API v3 uses 'commentThreads' endpoint to get top-level comments
-  const youtubeApiUrl = `https://www.googleapis.com/youtube/v3/commentThreads?key=\${apiKey}&videoId=\${videoId}&part=snippet&maxResults=100&order=relevance`; // Fetch top 100 relevant comments
+  const youtubeApiUrl = `https://www.googleapis.com/youtube/v3/commentThreads?key=${apiKey}&videoId=${videoId}&part=snippet&maxResults=100&order=relevance`; // Fetch top 100 relevant comments
 
   try {
     const response = await fetch(youtubeApiUrl, {
@@ -40,8 +40,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch data from YouTube API' }, { status: 500 });
   }
 }
-
-// You might need a different endpoint or parameters depending on the exact data needed
-// For example, getting video details uses the 'videos' endpoint:
-// const videoDetailsUrl = `https://www.googleapis.com/youtube/v3/videos?id=${videoId}&key=${apiKey}&part=snippet,contentDetails,statistics`;
-

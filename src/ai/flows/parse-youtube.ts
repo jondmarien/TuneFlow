@@ -17,6 +17,10 @@ const ParseYouTubeCommentInputSchema = z.object({
     .boolean()
     .default(false)
     .describe('Whether to prioritize pinned comments (Note: Pinned status might not be available via basic commentThreads endpoint).'),
+  scanDescription: z
+    .boolean()
+    .default(false)
+    .describe('Whether to scan the video description for song and artist info.'),
 });
 export type ParseYouTubeCommentInput = z.infer<typeof ParseYouTubeCommentInputSchema>;
 
@@ -112,17 +116,23 @@ const parseYouTubeCommentFlow = ai.defineFlow<
   },
   async input => {
     let commentsData: any[] = []; // Store raw comment items from API
+    let descriptionText = '';
 
     // Construct the absolute URL for the internal API route
     // Use localhost and port from dev script (9002) for local development.
     // For production, use an environment variable (e.g., process.env.NEXT_PUBLIC_APP_URL)
     const internalApiBaseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002';
-    const apiUrl = `${internalApiBaseUrl}/api/youtube`;
+    const apiUrl = `${internalApiBaseUrl}/api/youtube/comments`;
     console.log(`[parseYouTubeCommentFlow] Fetching comments from internal API: ${apiUrl}`);
 
     // Only handle video URLs as per the current API route
     if (input.youtubeUrl.includes('watch?v=')) {
-      const videoId = new URL(input.youtubeUrl).searchParams.get('v');
+      // Ensure the URL has a protocol, add https:// if missing
+      let urlStr = input.youtubeUrl;
+      if (!urlStr.startsWith('http://') && !urlStr.startsWith('https://')) {
+        urlStr = 'https://' + urlStr;
+      }
+      const videoId = new URL(urlStr).searchParams.get('v');
       if (!videoId) {
         throw new Error('Invalid YouTube video URL: Missing video ID.');
       }
@@ -166,12 +176,45 @@ const parseYouTubeCommentFlow = ai.defineFlow<
         console.error('[parseYouTubeCommentFlow] Error calling backend API route or processing response:', error);
         throw new Error(`Error fetching comments: ${error instanceof Error ? error.message : String(error)}`);
       }
+
+      // Fetch description if requested
+      if (input.scanDescription) {
+        // Use the same internal API to fetch video details (assuming /api/youtube supports it)
+        const descApiUrl = `${internalApiBaseUrl}/api/youtube/description`;
+        try {
+          const descResponse = await fetch(descApiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ videoId }),
+          });
+          const descData = await descResponse.json();
+          if (descResponse.ok && descData.description) {
+            descriptionText = descData.description;
+          }
+        } catch (descErr) {
+          console.warn('[parseYouTubeCommentFlow] Could not fetch video description:', descErr);
+        }
+      }
     } else {
         console.warn('[parseYouTubeCommentFlow] Input URL is not a standard video URL. Skipping comment fetch.', input.youtubeUrl);
         throw new Error('Invalid input: Please provide a YouTube video URL (e.g., https://www.youtube.com/watch?v=...).');
     }
 
     const songs: { title: string; artist: string; }[] = [];
+    // If descriptionText is present, parse it for songs
+    if (descriptionText) {
+      try {
+        const {output} = await parseCommentPrompt({ commentText: descriptionText });
+        if (output?.songs) {
+          const validSongs = output.songs.filter(s => s.title && s.artist && s.title !== 'Unknown' && s.artist !== 'Unknown');
+          if (validSongs.length > 0) {
+            songs.push(...validSongs);
+          }
+        }
+      } catch (descPromptErr) {
+        console.error('[parseYouTubeCommentFlow] Error processing description with AI prompt:', descPromptErr);
+      }
+    }
 
     // Process comments fetched from the API route
     console.log(`[parseYouTubeCommentFlow] Processing ${commentsData.length} comment items with AI prompt...`);

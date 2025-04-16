@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Icons } from "@/components/icons";
-import { parseYouTubeComment, ParseYouTubeCommentOutput } from "@/ai/flows/parse-youtube-comment";
+import { parseYouTubeComment, ParseYouTubeCommentOutput } from "@/ai/flows/parse-youtube";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 
@@ -34,6 +34,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [spotifyUserId, setSpotifyUserId] = useState("");
   const [prioritizePinned, setPrioritizePinned] = useState(false);
+  const [scanDescription, setScanDescription] = useState(false);
   const { toast } = useToast();
   const [spotifyReady, setSpotifyReady] = useState(true); // Assume ready for basic search initially
   const [parsingState, setParsingState] = useState<string | null>(null); // More specific state tracking
@@ -60,11 +61,12 @@ export default function Home() {
 
     try {
       parseToast.update({ id: parseToast.id, title: 'Calling AI Flow...', description: 'Fetching and analyzing comments.' });
-      console.log(`Calling parseYouTubeComment for URL: ${youtubeLink}, prioritizePinned: ${prioritizePinned}`);
+      console.log(`Calling parseYouTubeComment for URL: ${youtubeLink}, prioritizePinned: ${prioritizePinned}, scanDescription: ${scanDescription}`);
 
       const result: ParseYouTubeCommentOutput = await parseYouTubeComment({
         youtubeUrl: youtubeLink,
-        prioritizePinnedComments: prioritizePinned
+        prioritizePinnedComments: prioritizePinned,
+        scanDescription: scanDescription
       });
 
       console.log('parseYouTubeComment finished. Result:', result);
@@ -74,7 +76,7 @@ export default function Home() {
         id: parseToast.id,
         title: "Parsing Complete",
         description: `Found ${result.songs.length} potential songs. Check the list below.`,
-        variant: "success"
+        // variant: "success" // Commented out as 'success' is not a valid variant
       });
       console.log(`Successfully parsed ${result.songs.length} songs.`);
 
@@ -207,7 +209,7 @@ export default function Home() {
             id: playlistToast.id,
             title: "Playlist Created!",
             description: `Playlist '${playlistName}' created with ${trackUris.length} tracks.`, // Used actual name
-            variant: "success",
+            // variant: "success", // Commented out as 'success' is not a valid variant
           });
           console.log(`Successfully created playlist ID: ${createData.playlistId}`);
       }
@@ -258,6 +260,17 @@ export default function Home() {
                 />
                 <Label htmlFor="prioritize-pinned" className="text-sm text-muted-foreground">
                   Prioritize Pinned Comments (if available)
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="scan-description"
+                  checked={scanDescription}
+                  onCheckedChange={(checked) => setScanDescription(Boolean(checked))}
+                  disabled={loading}
+                />
+                <Label htmlFor="scan-description" className="text-sm text-muted-foreground">
+                  Scan Description for Songs
                 </Label>
               </div>
               <Button
