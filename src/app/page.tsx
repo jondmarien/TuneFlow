@@ -227,6 +227,8 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
+  const [inputMode, setInputMode] = useState<'url' | 'id'>('url');
+
   // Persist youtubeLink and songs to sessionStorage
   useEffect(() => {
     sessionStorage.setItem('youtubeLink', youtubeLink);
@@ -235,493 +237,507 @@ export default function Home() {
     sessionStorage.setItem('parsedSongs', JSON.stringify(songs));
   }, [songs]);
 
-// Helper to extract YouTube video ID
-function getYoutubeVideoId(url: string): string | null {
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname.includes("youtu.be")) {
-      return parsed.pathname.slice(1);
+  // Helper to extract YouTube video ID
+  function getYoutubeVideoId(url: string): string | null {
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname.includes("youtu.be")) {
+        return parsed.pathname.slice(1);
+      }
+      return parsed.searchParams.get("v");
+    } catch {
+      return null;
     }
-    return parsed.searchParams.get("v");
-  } catch {
-    return null;
   }
-}
 
-// Fetch YouTube video title for playlist name
-async function fetchYoutubeTitle(videoId: string): Promise<string | null> {
-  try {
-    const res = await fetch("/api/youtube/title", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ videoId })
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.title || null;
-  } catch {
-    return null;
+  // Helper to check if a string is a YouTube video ID
+  function isYoutubeVideoId(input: string): boolean {
+    return /^[\w-]{11}$/.test(input);
   }
-}
 
-// Fetch genres from Spotify API
-async function fetchSpotifyGenres(): Promise<string[]> {
-  try {
-    const res = await fetch('/api/spotify/categories');
-    if (!res.ok) {
+  // Helper to build a YouTube URL from a video ID
+  function buildYoutubeUrlFromId(videoId: string): string {
+    return `https://www.youtube.com/watch?v=${videoId}`;
+  }
+
+  // Fetch YouTube video title for playlist name
+  async function fetchYoutubeTitle(videoId: string): Promise<string | null> {
+    try {
+      const res = await fetch("/api/youtube/title", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoId })
+      });
+      if (!res.ok) return null;
       const data = await res.json();
+      return data.title || null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Fetch genres from Spotify API
+  async function fetchSpotifyGenres(): Promise<string[]> {
+    try {
+      const res = await fetch('/api/spotify/categories');
+      if (!res.ok) {
+        const data = await res.json();
+        toast({
+          title: 'Spotify Categories Error',
+          description: data.error || 'Could not fetch categories from Spotify.',
+          variant: 'destructive',
+          position: 'top-left',
+        });
+        return [];
+      }
+      const data = await res.json();
+      return data.genres || [];
+    } catch (err: any) {
       toast({
         title: 'Spotify Categories Error',
-        description: data.error || 'Could not fetch categories from Spotify.',
+        description: err.message || 'Could not fetch categories from Spotify.',
         variant: 'destructive',
         position: 'top-left',
       });
       return [];
     }
-    const data = await res.json();
-    return data.genres || [];
-  } catch (err: any) {
-    toast({
-      title: 'Spotify Categories Error',
-      description: err.message || 'Could not fetch categories from Spotify.',
-      variant: 'destructive',
-      position: 'top-left',
-    });
-    return [];
   }
-}
 
-// Fallback AI playlist name generation using YouTube title or a static name
-async function generateAiPlaylistName(songs: Song[]): Promise<string> {
-  // Fallback: Use the YouTube video title or a static name
-  if (!songs.length) return "AI Playlist";
-  // Try to fetch YouTube title for a more descriptive fallback
-  // (Assume getYoutubeVideoId and fetchYoutubeTitle exist in the file)
-  try {
-    const videoId = getYoutubeVideoId(youtubeLink);
-    if (videoId) {
-      const ytTitle = await fetchYoutubeTitle(videoId);
-      if (ytTitle) return ytTitle + " Playlist";
-    }
-  } catch {}
-  return "AI Playlist";
-}
-
-// Helper to search Spotify for a track URI
-async function searchSpotifyTrackUri(song: Song, signal?: AbortSignal): Promise<string | null> {
-  if (!spotifyConnected) {
-    toast({
-      title: 'Spotify Login Required',
-      description: 'Please connect your Spotify account before searching for songs.',
-      variant: 'destructive',
-      position: 'top-left',
-    });
-    return null;
+  // Fallback AI playlist name generation using YouTube title or a static name
+  async function generateAiPlaylistName(songs: Song[]): Promise<string> {
+    // Fallback: Use the YouTube video title or a static name
+    if (!songs.length) return "AI Playlist";
+    // Try to fetch YouTube title for a more descriptive fallback
+    // (Assume getYoutubeVideoId and fetchYoutubeTitle exist in the file)
+    try {
+      const videoId = getYoutubeVideoId(youtubeLink);
+      if (videoId) {
+        const ytTitle = await fetchYoutubeTitle(videoId);
+        if (ytTitle) return ytTitle + " Playlist";
+      }
+    } catch {}
+    return "AI Playlist";
   }
-  try {
-    const query = `${song.title} ${song.artist}`;
-    const res = await fetch('/api/spotify/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q: query }),
-      signal,
-    });
-    if (!res.ok) {
-      const data = await res.json();
+
+  // Helper to search Spotify for a track URI
+  async function searchSpotifyTrackUri(song: Song, signal?: AbortSignal): Promise<string | null> {
+    if (!spotifyConnected) {
       toast({
-        title: 'Spotify Search Error',
-        description: data.error || 'Could not search for song on Spotify.',
+        title: 'Spotify Login Required',
+        description: 'Please connect your Spotify account before searching for songs.',
         variant: 'destructive',
         position: 'top-left',
       });
       return null;
     }
-    const data = await res.json();
-    return data.track?.uri || null;
-  } catch (err: any) {
-    if (err.name === 'AbortError') return null;
-    toast({
-      title: 'Spotify Search Error',
-      description: err.message || 'Could not search for song on Spotify.',
-      variant: 'destructive',
-      position: 'top-left',
-    });
-    return null;
-  }
-}
-
-// --- Handlers ---
-
-const handleParseComments = async () => {
-  console.log('handleParseComments started');
-  if (!youtubeLink) {
-    console.warn('YouTube link missing');
-    toast({ title: "Input Missing", description: "Please enter a YouTube URL.", variant: "destructive", position: 'top-left' });
-    return;
-  }
-  if (!scanChapters && !scanDescription && !scanComments) {
-    toast({ title: "No Extraction Selected", description: "Please select at least one extraction method.", variant: "destructive", position: 'top-left' });
-    return;
-  }
-
-  setLoading(true);
-  setSongs([]);
-  setFailedAlbumArtSongs([]);
-  setCanCreatePlaylist(false);
-
-  const parseToast = toast({ title: 'Starting YouTube Comment Parsing...', description: 'Please wait...', position: 'top-left' });
-  console.log('Initiating YouTube comment parsing...');
-  setParsingState("Fetching & Parsing Comments");
-
-  const videoId = getYoutubeVideoId(youtubeLink);
-  let errors: string[] = [];
-  let allSongs: Song[] = [];
-
-  // Chapters extraction
-  if (scanChapters) {
-    setLoading(true);
-    setSongs([]);
-    setCanCreatePlaylist(false);
-    setParsingState("Fetching & Parsing Chapters");
-    toast({ title: 'Starting YouTube Chapters Parsing...', description: 'Please wait...', position: 'top-left' });
     try {
-      const videoId = youtubeLink.includes('watch?v=') ? new URL(youtubeLink.startsWith('http') ? youtubeLink : 'https://' + youtubeLink).searchParams.get('v') : youtubeLink;
-      const resp = await fetch('/api/youtube/chapters', {
+      const query = `${song.title} ${song.artist}`;
+      const res = await fetch('/api/spotify/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId }),
+        body: JSON.stringify({ q: query }),
+        signal,
       });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || 'Failed to fetch chapters');
-      if (!data.chapters?.length) throw new Error('No chapters found in this video.');
-      // Compose a string of all chapter titles for AI
-      const chapterText = data.chapters.map((ch: any) => `${ch.start} ${ch.title}`).join('\n');
-      setParsingState("Processing Chapters with AI");
-      const aiResult: ParseYouTubeCommentOutput = await parseYouTubeComment({ youtubeUrl: youtubeLink, prioritizePinnedComments: prioritizePinned, scanDescription: false, chapters: chapterText });
-      allSongs = allSongs.concat(aiResult.songs.map(song => ({ ...song, imageUrl: song.imageUrl ?? undefined })));
-    } catch (err: any) {
-      errors.push('Chapter extraction failed: ' + (err.message || String(err)));
-    }
-  }
-
-  // Description extraction
-  if (scanDescription) {
-    try {
-      const resp = await fetch('/api/youtube/description', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId }),
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || 'Failed to fetch description');
-      if (data.description) {
-        setParsingState("Processing Description with AI");
-        const aiResult: ParseYouTubeCommentOutput = await parseYouTubeComment({ youtubeUrl: youtubeLink, prioritizePinnedComments: prioritizePinned, scanDescription: true, description: data.description });
-        allSongs = allSongs.concat(aiResult.songs.map(song => ({ ...song, imageUrl: song.imageUrl ?? undefined })));
-      } else {
-        errors.push('No description found in this video.');
+      if (!res.ok) {
+        const data = await res.json();
+        toast({
+          title: 'Spotify Search Error',
+          description: data.error || 'Could not search for song on Spotify.',
+          variant: 'destructive',
+          position: 'top-left',
+        });
+        return null;
       }
+      const data = await res.json();
+      return data.track?.uri || null;
     } catch (err: any) {
-      errors.push('Description extraction failed: ' + (err.message || String(err)));
-    }
-  }
-
-  // Comments extraction
-  if (scanComments) {
-    try {
-      setParsingState("Fetching & Parsing Comments");
-      const resp = await fetch('/api/youtube/comments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId, prioritizePinnedComments: prioritizePinned }),
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || 'Failed to fetch comments');
-      if (data.comments?.length) {
-        setParsingState("Processing Comments with AI");
-        const aiResult: ParseYouTubeCommentOutput = await parseYouTubeComment({ youtubeUrl: youtubeLink, prioritizePinnedComments: prioritizePinned, scanDescription: false, comments: data.comments });
-        allSongs = allSongs.concat(aiResult.songs.map(song => ({ ...song, imageUrl: song.imageUrl ?? undefined })));
-      } else {
-        errors.push('No comments found with tracklist/songlist in this video.');
-      }
-    } catch (err: any) {
-      errors.push('Comments extraction failed: ' + (err.message || String(err)));
-    }
-  }
-
-  setSongs(allSongs);
-  setCanCreatePlaylist(allSongs.length > 0);
-  setParsingState(null);
-  setLoading(false);
-
-  // Persist after parse
-  sessionStorage.setItem('youtubeLink', youtubeLink);
-  sessionStorage.setItem('parsedSongs', JSON.stringify(allSongs));
-
-  if (errors.length) {
-    toast({
-      title: allSongs.length > 0 ? 'Some Extractions Failed' : 'Extraction Failed',
-      description: errors.join(' | '),
-      variant: allSongs.length > 0 ? 'default' : 'destructive',
-      position: 'top-left',
-    });
-  } else if (allSongs.length === 0) {
-    toast({
-      title: 'No Songs Found',
-      description: 'No songs could be extracted from the selected sources.',
-      variant: 'destructive',
-      position: 'top-left',
-    });
-  }
-};
-
-const handleCreatePlaylist = async () => {
-  setAbortPlaylist(false);
-  const abortController = new AbortController();
-  setPlaylistAbortController(abortController);
-  console.log('handleCreatePlaylist started');
-  if (!spotifyConnected) {
-    toast({ title: 'Spotify Login Required', description: 'Please connect your Spotify account before creating a playlist.', variant: 'destructive', position: 'top-left' });
-    return;
-  }
-  if (songs.length === 0) {
-    console.warn('No songs available to create playlist');
-    toast({ title: "No Songs", description: "No songs found to add to the playlist.", variant: "destructive", position: 'top-left' });
-    return;
-  }
-  setLoading(true);
-  const playlistToast = toast({ title: 'Starting Playlist Creation...', description: 'Please wait...', position: 'top-left' });
-  setParsingState("Finding Songs on Spotify");
-  let finalPlaylistName = playlistName;
-  try {
-    if (!useAiPlaylistName) {
-      // Use YouTube video title
-      const videoId = getYoutubeVideoId(youtubeLink);
-      if (videoId) {
-        const ytTitle = await fetchYoutubeTitle(videoId);
-        finalPlaylistName = ytTitle ? ytTitle : `YouTube Playlist`;
-      } else {
-        finalPlaylistName = `YouTube Playlist`;
-      }
-    } else {
-      // Use AI-generated name, but fail if genres can't be fetched
-      finalPlaylistName = await generateAiPlaylistName(songs);
-    }
-    setPlaylistName(finalPlaylistName);
-    // Find Spotify track URIs for all parsed songs
-    let trackUris: string[] = [];
-    for (const song of songs) {
-      if (abortPlaylist) throw new Error('Playlist creation stopped by user.');
-      const uri = await searchSpotifyTrackUri(song, abortController.signal);
-      if (uri) trackUris.push(uri);
-    }
-    // Fetch Spotify user ID
-    if (abortPlaylist) throw new Error('Playlist creation stopped by user.');
-    const userRes = await fetch('/api/spotify/me', { signal: abortController.signal });
-    const userData = await userRes.json();
-    if (!userData.id) {
-      playlistToast.update({
-        id: playlistToast.id,
-        title: 'Spotify User Error',
-        description: 'Could not fetch Spotify user ID.',
+      if (err.name === 'AbortError') return null;
+      toast({
+        title: 'Spotify Search Error',
+        description: err.message || 'Could not search for song on Spotify.',
         variant: 'destructive',
         position: 'top-left',
       });
-      setLoading(false);
-      setParsingState(null);
+      return null;
+    }
+  }
+
+  // --- Handlers ---
+
+  const handleParseComments = async () => {
+    console.log('handleParseComments started');
+    if (!youtubeLink) {
+      console.warn('YouTube link missing');
+      toast({ title: "Input Missing", description: "Please enter a YouTube URL or Video ID.", variant: "destructive", position: 'top-left' });
       return;
     }
-    const userId = userData.id;
-    // --- Playlist Creation Request ---
-    if (abortPlaylist) throw new Error('Playlist creation stopped by user.');
-    const createResponse = await fetch('/api/spotify/playlist', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId,
-        playlistName: finalPlaylistName,
-        trackUris,
-      }),
-      signal: abortController.signal,
-    });
-    let createData;
-    let createIsJson = false;
-    const createContentType = createResponse.headers.get('content-type');
-    if (createContentType && createContentType.includes('application/json')) {
-      try {
-        createData = await createResponse.json();
-        createIsJson = true;
-      } catch (err) {
-        createData = { error: 'Failed to parse JSON response from /api/spotify/playlist.' };
-      }
-    } else {
-      createData = { error: 'Received non-JSON response from /api/spotify/playlist.' };
+    let actualYoutubeUrl = youtubeLink;
+    if (inputMode === 'id' && isYoutubeVideoId(youtubeLink)) {
+      actualYoutubeUrl = buildYoutubeUrlFromId(youtubeLink);
     }
-    if (!createResponse.ok) {
-      const errorMessage = createData?.error || createData?.message || `Failed to create playlist (Status: ${createResponse.status})`;
-      playlistToast.update({
-        id: playlistToast.id,
-        title: "Playlist Creation Failed",
-        description: errorMessage,
-        variant: "destructive",
+    if (!scanChapters && !scanDescription && !scanComments) {
+      toast({ title: "No Extraction Selected", description: "Please select at least one extraction method.", variant: "destructive", position: 'top-left' });
+      return;
+    }
+
+    setLoading(true);
+    setSongs([]);
+    setFailedAlbumArtSongs([]);
+    setCanCreatePlaylist(false);
+
+    const parseToast = toast({ title: 'Starting YouTube Comment Parsing...', description: 'Please wait...', position: 'top-left' });
+    console.log('Initiating YouTube comment parsing...');
+    setParsingState("Fetching & Parsing Comments");
+
+    const videoId = getYoutubeVideoId(actualYoutubeUrl);
+    let errors: string[] = [];
+    let allSongs: Song[] = [];
+
+    // Chapters extraction
+    if (scanChapters) {
+      setLoading(true);
+      setSongs([]);
+      setCanCreatePlaylist(false);
+      setParsingState("Fetching & Parsing Chapters");
+      toast({ title: 'Starting YouTube Chapters Parsing...', description: 'Please wait...', position: 'top-left' });
+      try {
+        const videoId = actualYoutubeUrl.includes('watch?v=') ? new URL(actualYoutubeUrl.startsWith('http') ? actualYoutubeUrl : 'https://' + actualYoutubeUrl).searchParams.get('v') : actualYoutubeUrl;
+        const resp = await fetch('/api/youtube/chapters', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Failed to fetch chapters');
+        if (!data.chapters?.length) throw new Error('No chapters found in this video.');
+        // Compose a string of all chapter titles for AI
+        const chapterText = data.chapters.map((ch: any) => `${ch.start} ${ch.title}`).join('\n');
+        setParsingState("Processing Chapters with AI");
+        const aiResult: ParseYouTubeCommentOutput = await parseYouTubeComment({ youtubeUrl: actualYoutubeUrl, prioritizePinnedComments: prioritizePinned, scanDescription: false, chapters: chapterText });
+        allSongs = allSongs.concat(aiResult.songs.map(song => ({ ...song, imageUrl: song.imageUrl ?? undefined })));
+      } catch (err: any) {
+        errors.push('Chapters extraction failed: ' + (err.message || String(err)));
+      }
+    }
+
+    // Description extraction
+    if (scanDescription) {
+      try {
+        const resp = await fetch('/api/youtube/description', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Failed to fetch description');
+        if (data.description) {
+          setParsingState("Processing Description with AI");
+          const aiResult: ParseYouTubeCommentOutput = await parseYouTubeComment({ youtubeUrl: actualYoutubeUrl, prioritizePinnedComments: prioritizePinned, scanDescription: true, description: data.description });
+          allSongs = allSongs.concat(aiResult.songs.map(song => ({ ...song, imageUrl: song.imageUrl ?? undefined })));
+        } else {
+          errors.push('No description found in this video.');
+        }
+      } catch (err: any) {
+        errors.push('Description extraction failed: ' + (err.message || String(err)));
+      }
+    }
+
+    // Comments extraction
+    if (scanComments) {
+      try {
+        setParsingState("Fetching & Parsing Comments");
+        const resp = await fetch('/api/youtube/comments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId, prioritizePinnedComments: prioritizePinned }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Failed to fetch comments');
+        if (data.comments?.length) {
+          setParsingState("Processing Comments with AI");
+          const aiResult: ParseYouTubeCommentOutput = await parseYouTubeComment({ youtubeUrl: actualYoutubeUrl, prioritizePinnedComments: prioritizePinned, scanDescription: false, comments: data.comments });
+          allSongs = allSongs.concat(aiResult.songs.map(song => ({ ...song, imageUrl: song.imageUrl ?? undefined })));
+        } else {
+          errors.push('No comments found with tracklist/songlist in this video.');
+        }
+      } catch (err: any) {
+        errors.push('Comments extraction failed: ' + (err.message || String(err)));
+      }
+    }
+
+    setSongs(allSongs);
+    setCanCreatePlaylist(allSongs.length > 0);
+    setParsingState(null);
+    setLoading(false);
+
+    // Persist after parse
+    sessionStorage.setItem('youtubeLink', youtubeLink);
+    sessionStorage.setItem('parsedSongs', JSON.stringify(allSongs));
+
+    if (errors.length) {
+      toast({
+        title: allSongs.length > 0 ? 'Some Extractions Failed' : 'Extraction Failed',
+        description: errors.join(' | '),
+        variant: allSongs.length > 0 ? 'default' : 'destructive',
         position: 'top-left',
       });
-      throw new Error(errorMessage);
-    } else {
-      playlistToast.dismiss();
-      // Show green, non-fading toast with playlist URL
-      playlistToast.update({
-        id: playlistToast.id,
-        title: 'Playlist Created!',
-        description: (
-          <span>
-            Playlist '{finalPlaylistName}' created successfully!{' '}
-            {createData.playlistUrl && (
-              <a href={createData.playlistUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#22c55e', fontWeight: 'bold', textDecoration: 'underline' }}>
-                Open Playlist
-              </a>
-            )}
-          </span>
-        ),
-        variant: 'default',
-        duration: 1000000,
-        position: 'top-right',
-      });
+    } else if (allSongs.length === 0) {
       toast({
-        title: 'Playlist Created!',
-        description: (
-          <span>
-            Playlist '{finalPlaylistName}' created successfully!{' '}
-            {createData.playlistUrl && (
-              <a href={createData.playlistUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#22c55e', fontWeight: 'bold', textDecoration: 'underline' }}>
-                Open Playlist
-              </a>
-            )}
-          </span>
-        ),
-        variant: 'default',
-        duration: 1000000,
-        position: 'top-right',
+        title: 'No Songs Found',
+        description: 'No songs could be extracted from the selected sources.',
+        variant: 'destructive',
+        position: 'top-left',
       });
-      console.log(`Successfully created playlist ID: ${createData.playlistId}`);
-      if (createData.playlistUrl) {
-        console.log('Playlist URL:', createData.playlistUrl);
-      }
     }
-  } catch (error: any) {
-    if (error.name === 'AbortError' || error.message === 'Playlist creation stopped by user.') {
+  };
+
+  const handleCreatePlaylist = async () => {
+    setAbortPlaylist(false);
+    const abortController = new AbortController();
+    setPlaylistAbortController(abortController);
+    console.log('handleCreatePlaylist started');
+    if (!spotifyConnected) {
+      toast({ title: 'Spotify Login Required', description: 'Please connect your Spotify account before creating a playlist.', variant: 'destructive', position: 'top-left' });
+      return;
+    }
+    if (songs.length === 0) {
+      console.warn('No songs available to create playlist');
+      toast({ title: "No Songs", description: "No songs found to add to the playlist.", variant: "destructive", position: 'top-left' });
+      return;
+    }
+    setLoading(true);
+    const playlistToast = toast({ title: 'Starting Playlist Creation...', description: 'Please wait...', position: 'top-left' });
+    setParsingState("Finding Songs on Spotify");
+    let finalPlaylistName = playlistName;
+    try {
+      if (!useAiPlaylistName) {
+        // Use YouTube video title
+        const videoId = getYoutubeVideoId(youtubeLink);
+        if (videoId) {
+          const ytTitle = await fetchYoutubeTitle(videoId);
+          finalPlaylistName = ytTitle ? ytTitle : `YouTube Playlist`;
+        } else {
+          finalPlaylistName = `YouTube Playlist`;
+        }
+      } else {
+        // Use AI-generated name, but fail if genres can't be fetched
+        finalPlaylistName = await generateAiPlaylistName(songs);
+      }
+      setPlaylistName(finalPlaylistName);
+      // Find Spotify track URIs for all parsed songs
+      let trackUris: string[] = [];
+      for (const song of songs) {
+        if (abortPlaylist) throw new Error('Playlist creation stopped by user.');
+        const uri = await searchSpotifyTrackUri(song, abortController.signal);
+        if (uri) trackUris.push(uri);
+      }
+      // Fetch Spotify user ID
+      if (abortPlaylist) throw new Error('Playlist creation stopped by user.');
+      const userRes = await fetch('/api/spotify/me', { signal: abortController.signal });
+      const userData = await userRes.json();
+      if (!userData.id) {
+        playlistToast.update({
+          id: playlistToast.id,
+          title: 'Spotify User Error',
+          description: 'Could not fetch Spotify user ID.',
+          variant: 'destructive',
+          position: 'top-left',
+        });
+        setLoading(false);
+        setParsingState(null);
+        return;
+      }
+      const userId = userData.id;
+      // --- Playlist Creation Request ---
+      if (abortPlaylist) throw new Error('Playlist creation stopped by user.');
+      const createResponse = await fetch('/api/spotify/playlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          playlistName: finalPlaylistName,
+          trackUris,
+        }),
+        signal: abortController.signal,
+      });
+      let createData;
+      let createIsJson = false;
+      const createContentType = createResponse.headers.get('content-type');
+      if (createContentType && createContentType.includes('application/json')) {
+        try {
+          createData = await createResponse.json();
+          createIsJson = true;
+        } catch (err) {
+          createData = { error: 'Failed to parse JSON response from /api/spotify/playlist.' };
+        }
+      } else {
+        createData = { error: 'Received non-JSON response from /api/spotify/playlist.' };
+      }
+      if (!createResponse.ok) {
+        const errorMessage = createData?.error || createData?.message || `Failed to create playlist (Status: ${createResponse.status})`;
+        playlistToast.update({
+          id: playlistToast.id,
+          title: "Playlist Creation Failed",
+          description: errorMessage,
+          variant: "destructive",
+          position: 'top-left',
+        });
+        throw new Error(errorMessage);
+      } else {
+        playlistToast.dismiss();
+        // Show green, non-fading toast with playlist URL
+        playlistToast.update({
+          id: playlistToast.id,
+          title: 'Playlist Created!',
+          description: (
+            <span>
+              Playlist '{finalPlaylistName}' created successfully!{' '}
+              {createData.playlistUrl && (
+                <a href={createData.playlistUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#22c55e', fontWeight: 'bold', textDecoration: 'underline' }}>
+                  Open Playlist
+                </a>
+              )}
+            </span>
+          ),
+          variant: 'default',
+          duration: 1000000,
+          position: 'top-right',
+        });
+        toast({
+          title: 'Playlist Created!',
+          description: (
+            <span>
+              Playlist '{finalPlaylistName}' created successfully!{' '}
+              {createData.playlistUrl && (
+                <a href={createData.playlistUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#22c55e', fontWeight: 'bold', textDecoration: 'underline' }}>
+                  Open Playlist
+                </a>
+              )}
+            </span>
+          ),
+          variant: 'default',
+          duration: 1000000,
+          position: 'top-right',
+        });
+        console.log(`Successfully created playlist ID: ${createData.playlistId}`);
+        if (createData.playlistUrl) {
+          console.log('Playlist URL:', createData.playlistUrl);
+        }
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError' || error.message === 'Playlist creation stopped by user.') {
+        toast({
+          title: 'Playlist Creation Stopped',
+          description: 'Playlist creation was aborted by the user.',
+          variant: 'destructive',
+          position: 'top-left',
+        });
+      } else {
+        console.error("Error during handleCreatePlaylist:", error);
+        toast({
+          title: "Playlist Creation Failed",
+          description: error.message || "An unexpected error occurred.",
+          variant: "destructive",
+          position: 'top-left',
+        });
+      }
+    } finally {
+      setLoading(false);
+      setParsingState(null);
+      setAbortPlaylist(false);
+      setPlaylistAbortController(null);
+    }
+  };
+
+  const handleStopPlaylist = () => {
+    if (playlistAbortController) {
+      playlistAbortController.abort();
+    }
+    setAbortPlaylist(true);
+  };
+
+  useEffect(() => {
+    if (abortPlaylist) {
+      setLoading(false);
+      setParsingState(null);
       toast({
         title: 'Playlist Creation Stopped',
         description: 'Playlist creation was aborted by the user.',
         variant: 'destructive',
         position: 'top-left',
       });
-    } else {
-      console.error("Error during handleCreatePlaylist:", error);
-      toast({
-        title: "Playlist Creation Failed",
-        description: error.message || "An unexpected error occurred.",
-        variant: "destructive",
-        position: 'top-left',
-      });
     }
-  } finally {
-    setLoading(false);
-    setParsingState(null);
-    setAbortPlaylist(false);
-    setPlaylistAbortController(null);
-  }
-};
+  }, [abortPlaylist]);
 
-const handleStopPlaylist = () => {
-  if (playlistAbortController) {
-    playlistAbortController.abort();
-  }
-  setAbortPlaylist(true);
-};
-
-useEffect(() => {
-  if (abortPlaylist) {
-    setLoading(false);
-    setParsingState(null);
-    toast({
-      title: 'Playlist Creation Stopped',
-      description: 'Playlist creation was aborted by the user.',
-      variant: 'destructive',
-      position: 'top-left',
-    });
-  }
-}, [abortPlaylist]);
-
-const handleCreateYouTubePlaylist = async () => {
-  if (!youtubeConnected) {
-    toast({ title: 'YouTube Login Required', description: 'Please connect your YouTube (Google) account before creating a playlist.', variant: 'destructive', position: 'top-left' });
-    return;
-  }
-  if (songs.length === 0) {
-    toast({ title: 'No Songs', description: 'No songs available to create a YouTube playlist.', variant: 'destructive', position: 'top-left' });
-    return;
-  }
-  setLoading(true);
-  try {
-    // --- Get videoIds from songs ---
-    const videoIds = songs.map(song => song.videoId).filter((id): id is string => Boolean(id));
-
-    // --- Get YouTube video title for playlist name ---
-    let playlistTitle = 'TuneFlow Playlist';
-    const videoId = getYoutubeVideoId(youtubeLink);
-    if (videoId) {
-      const ytTitle = await fetchYoutubeTitle(videoId);
-      if (ytTitle) playlistTitle = ytTitle;
-    }
-
-    // --- Create playlist with correct title and videoIds ---
-    const res = await fetch('/api/youtube/playlist', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        playlistName: playlistTitle,
-        description: `Created with TuneFlow from YouTube comments`,
-        videoIds: videoIds.length > 0 ? videoIds : undefined,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      toast({ title: 'YouTube Playlist Error', description: data.error || 'Could not create YouTube playlist.', variant: 'destructive', position: 'top-left' });
-      setLoading(false);
+  const handleCreateYouTubePlaylist = async () => {
+    if (!youtubeConnected) {
+      toast({ title: 'YouTube Login Required', description: 'Please connect your YouTube (Google) account before creating a playlist.', variant: 'destructive', position: 'top-left' });
       return;
     }
-    toast({
-      title: 'Playlist Created!',
-      description: (
-        <span>
-          Playlist created successfully!{' '}
-          {data.playlistUrl && (
-            <a href={data.playlistUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#ef4444', fontWeight: 'bold', textDecoration: 'underline' }}>
-              Open Playlist
-            </a>
-          )}
-        </span>
-      ),
-      variant: 'default',
-      duration: 10000,
-      position: 'top-right',
-    });
-  } catch (err: any) {
-    toast({ title: 'YouTube Playlist Error', description: err.message || 'Could not create YouTube playlist.', variant: 'destructive', position: 'top-left' });
-  } finally {
-    setLoading(false);
+    if (songs.length === 0) {
+      toast({ title: 'No Songs', description: 'No songs available to create a YouTube playlist.', variant: 'destructive', position: 'top-left' });
+      return;
+    }
+    setLoading(true);
+    try {
+      // --- Get videoIds from songs ---
+      const videoIds = songs.map(song => song.videoId).filter((id): id is string => Boolean(id));
+
+      // --- Get YouTube video title for playlist name ---
+      let playlistTitle = 'TuneFlow Playlist';
+      const videoId = getYoutubeVideoId(youtubeLink);
+      if (videoId) {
+        const ytTitle = await fetchYoutubeTitle(videoId);
+        if (ytTitle) playlistTitle = ytTitle;
+      }
+
+      // --- Create playlist with correct title and videoIds ---
+      const res = await fetch('/api/youtube/playlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playlistName: playlistTitle,
+          description: `Created with TuneFlow from YouTube comments`,
+          videoIds: videoIds.length > 0 ? videoIds : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: 'YouTube Playlist Error', description: data.error || 'Could not create YouTube playlist.', variant: 'destructive', position: 'top-left' });
+        setLoading(false);
+        return;
+      }
+      toast({
+        title: 'Playlist Created!',
+        description: (
+          <span>
+            Playlist created successfully!{' '}
+            {data.playlistUrl && (
+              <a href={data.playlistUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#ef4444', fontWeight: 'bold', textDecoration: 'underline' }}>
+                Open Playlist
+              </a>
+            )}
+          </span>
+        ),
+        variant: 'default',
+        duration: 10000,
+        position: 'top-right',
+      });
+    } catch (err: any) {
+      toast({ title: 'YouTube Playlist Error', description: err.message || 'Could not create YouTube playlist.', variant: 'destructive', position: 'top-left' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  function handleClearParsed() {
+    setYoutubeLink('');
+    setSongs([]);
+    sessionStorage.removeItem('youtubeLink');
+    sessionStorage.removeItem('parsedSongs');
   }
-};
 
-function handleClearParsed() {
-  setYoutubeLink('');
-  setSongs([]);
-  sessionStorage.removeItem('youtubeLink');
-  sessionStorage.removeItem('parsedSongs');
-}
-
-// --- UI Rendering ---
+  // --- UI Rendering ---
   return (
     <div className="flex flex-col items-center justify-start min-h-screen p-4 bg-background text-foreground">
       <Card className="mb-4 relative">
@@ -783,6 +799,29 @@ function handleClearParsed() {
           <CardTitle className="text-lg font-semibold">TuneFlow</CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Input Mode Toggle */}
+          <div className="flex items-center gap-2 mb-2 justify-center">
+            <Label htmlFor="inputModeUrl">
+              <input
+                id="inputModeUrl"
+                type="radio"
+                checked={inputMode === 'url'}
+                onChange={() => setInputMode('url')}
+                className="mr-1"
+              />
+              YouTube URL
+            </Label>
+            <Label htmlFor="inputModeId">
+              <input
+                id="inputModeId"
+                type="radio"
+                checked={inputMode === 'id'}
+                onChange={() => setInputMode('id')}
+                className="mr-1"
+              />
+              Video ID Only
+            </Label>
+          </div>
           {/* YouTube Input Section */}
           <div className="space-y-2">
             <div className="flex items-center space-x-2">
@@ -791,8 +830,8 @@ function handleClearParsed() {
             </div>
             <Input
               id="youtube-link"
-              type="url"
-              placeholder="Enter YouTube Video URL (e.g., ...watch?v=...)"
+              type="text"
+              placeholder={inputMode === 'url' ? 'Paste YouTube URL here' : 'Enter YouTube Video ID'}
               value={youtubeLink}
               onChange={(e) => setYoutubeLink(e.target.value)}
               className="rounded-md"

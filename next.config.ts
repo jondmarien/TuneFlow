@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ['tuneflow.chron0.tech'],
   /* config options here */
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   eslint: {
     ignoreDuringBuilds: true,
