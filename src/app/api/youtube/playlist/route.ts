@@ -31,10 +31,24 @@ export async function POST(req: NextRequest) {
 
   const accessToken = (session as any).accessToken;
 
-  // Add custom description
-  let playlistDescription = `Created by TuneFlow. With <3 from Jon.\nhttps://tuneflow.chron0.tech`;
+  // Add custom description (YouTube API: avoid line breaks and special chars)
+  let playlistDescription = 'Created by TuneFlow. With <3 from Jon. https://tuneflow.chron0.tech';
 
-  // Create playlist
+  // Prefix playlist title for grouping
+  const prefixedTitle = playlistName ? `TuneFlow - ${playlistName}` : 'TuneFlow Playlist';
+
+  // Debug: log payload and values
+  console.log('YouTube playlist creation payload:', {
+    snippet: {
+      title: prefixedTitle,
+      description: playlistDescription,
+    },
+    status: { privacyStatus: 'public' },
+  });
+  console.log('playlistName:', prefixedTitle);
+  console.log('playlistDescription:', playlistDescription);
+
+  // Create playlist (public)
   const createRes = await fetch('https://www.googleapis.com/youtube/v3/playlists?part=snippet,status', {
     method: 'POST',
     headers: {
@@ -43,15 +57,16 @@ export async function POST(req: NextRequest) {
     },
     body: JSON.stringify({
       snippet: {
-        title: playlistName,
+        title: prefixedTitle,
         description: playlistDescription,
       },
-      status: { privacyStatus: 'private' },
+      status: { privacyStatus: 'public' },
     }),
   });
-
   const createData = await createRes.json();
+  // Extra error logging
   if (!createRes.ok) {
+    console.error('YouTube playlist creation error:', createData);
     return NextResponse.json({ error: createData.error?.message || 'Failed to create playlist', details: createData }, { status: createRes.status });
   }
 
