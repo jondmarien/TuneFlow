@@ -119,6 +119,17 @@ Contributions are welcome! Please open issues or submit pull requests for new fe
 
 ---
 
+## 📝 Legal Documents
+
+This project displays its Privacy Policy and Terms of Use as styled pages.
+
+If you clone this repo, you must provide `public/PRIVACY_POLICY.md` and `public/TERMS_OF_USE.md` for these pages to work. You can edit these markdown files to match your own requirements.
+
+- Privacy Policy: `/privacy-policy`
+- Terms of Use: `/terms-of-use`
+
+---
+
 ## 🛡️ License
 
 MIT License. See [LICENSE](LICENSE) for details.
