@@ -34,9 +34,11 @@ function hasAccessToken(session: Session | null | undefined): session is Session
   return !!session && typeof (session as any).accessToken === 'string';
 }
 
+// YouTube SVG icon (red and white official logo)
 const youtubeIcon = (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 mr-2">
-    <path d="M21.593 7.203a2.41 2.41 0 00-1.687-1.687C18.244 5.008 12 5.008 12 5.008s-6.244 0-7.906.508a2.41 2.41 0 00-1.687 1.687C2.008 8.865 2.008 12 2.008 12s0 3.135.508 4.797a2.41 2.41 0 001.687 1.687c1.662.508 7.906.508 7.906.508s6.244 0 7.906-.508a2.41 2.41 0 001.687-1.687C21.992 15.135 21.992 12 21.992 12s0-3.135-.407-4.797zM9.5 16.913V7.093l6.857 4.91 0 0-6.857 4.91z"></path>
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 mr-2">
+    <rect width="24" height="24" rx="4" fill="#FF0000"/>
+    <path d="M9.5 16.913V7.093l6.857 4.91-6.857 4.91z" fill="#fff"/>
   </svg>
 );
 
@@ -727,7 +729,7 @@ function handleClearParsed() {
           <CardTitle>Service Connections</CardTitle>
           {songs.length > 0 && (
             <Button
-              className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded text-xs shadow absolute right-4 top-4"
+              className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded flex items-center disabled:opacity-50"
               onClick={handleClearParsed}
             >
               Clear Parsed Songs
@@ -739,7 +741,7 @@ function handleClearParsed() {
             {/* YouTube Connection Status */}
             <div className="flex items-center space-x-2">
               {youtubeIcon}
-              <span className={`font-semibold ${youtubeConnected ? 'text-red-600' : 'text-gray-400'}`}>YouTube</span>
+              <span className="font-semibold text-red-600">YouTube</span>
               {youtubeConnected ? (
                 <span className="ml-1 text-xs px-2 py-0.5 rounded bg-[#f8d7da]" style={{ backgroundColor: '#f8d7da', color: '#f472b6', fontWeight: 600, border: '1px solid #fca5a5', minWidth: 90, display: 'inline-block', textAlign: 'center' }}>
                   CONNECTED!

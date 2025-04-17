@@ -19,6 +19,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTrackAlbumArt } from '@/services/spotify-service';
 import { redis } from '@/utils/redis';
+import { withRequestContext } from '../_logcontext';
 
 /**
  * Handles GET requests to the album art API route.
@@ -27,58 +28,71 @@ import { redis } from '@/utils/redis';
  * @returns NextResponse object
  */
 export async function GET(req: NextRequest) {
-  // --- Parse Request Parameters ---
+  const ip = req.headers.get('x-forwarded-for') || 'unknown-ip';
+  return withRequestContext(ip, async () => {
+    console.log('GET /api/album-art');
+    // --- Parse Request Parameters ---
 
-  const { searchParams } = new URL(req.url);
-  const title = searchParams.get('title');
-  const artist = searchParams.get('artist');
+    const { searchParams } = new URL(req.url);
+    const title = searchParams.get('title');
+    const artist = searchParams.get('artist');
 
-  // --- Validate Request Parameters ---
+    // --- Validate Request Parameters ---
 
-  if (!title || !artist) {
-    return NextResponse.json({ error: 'Missing title or artist' }, { status: 400 });
-  }
+    if (!title || !artist) {
+      return NextResponse.json({ error: 'Missing title or artist' }, { status: 400 });
+    }
 
-  // --- Check Redis Cache ---
+    // --- Check Redis Cache ---
 
-  const key = `albumArt:${title}|||${artist}`;
-  let imageUrl: string | null = null;
-  try {
-    imageUrl = await redis.get(key);
-  } catch (err) {
-    console.error('[album-art] Redis error:', err);
-    return NextResponse.json({ imageUrl: null, status: 'redis_error' });
-  }
+    const key = `albumArt:${title}|||${artist}`;
+    let imageUrl: string | null = null;
+    try {
+      imageUrl = await redis.get(key);
+    } catch (err) {
+      console.error('[album-art] Redis error:', err);
+      return NextResponse.json({ imageUrl: null, status: 'redis_error' });
+    }
 
-  // --- Return Cached Result ---
+    // --- Return Cached Result ---
 
-  if (imageUrl) {
-    return NextResponse.json({ imageUrl, status: 'ready' });
-  }
+    if (imageUrl) {
+      return NextResponse.json({ imageUrl, status: 'ready' });
+    }
 
-  // --- Deduplication: Check Fetching Lock ---
+    // --- Deduplication: Check Fetching Lock ---
 
-  const fetchingKey = `albumArt:fetching:${title}|||${artist}`;
-  let isFetching = false;
-  try {
-    isFetching = !!(await redis.get(fetchingKey));
-  } catch (err) {
-    console.error('[album-art] Redis error checking fetching lock:', err);
-  }
+    const fetchingKey = `albumArt:fetching:${title}|||${artist}`;
+    let isFetching = false;
+    try {
+      isFetching = !!(await redis.get(fetchingKey));
+    } catch (err) {
+      console.error('[album-art] Redis error checking fetching lock:', err);
+    }
 
-  // --- Trigger Background Fetch ---
+    // --- Trigger Background Fetch ---
 
-  if (!isFetching) {
-    await redis.set(fetchingKey, '1', 'EX', 30); // lock for 30 seconds
-    getTrackAlbumArt(title, artist).then(url => {
-      if (url) {
-        redis.set(key, url, 'EX', 60 * 60 * 24); // Cache for 24 hours
-      }
-      redis.del(fetchingKey);
-    });
-  }
+    if (!isFetching) {
+      await redis.set(fetchingKey, '1', 'EX', 30); // lock for 30 seconds
+      getTrackAlbumArt(title, artist).then(url => {
+        if (url) {
+          redis.set(key, url, 'EX', 60 * 60 * 24); // Cache for 24 hours
+        }
+        redis.del(fetchingKey);
+      });
+    }
 
-  // --- Return Pending Response ---
+    // --- Return Pending Response ---
 
-  return NextResponse.json({ imageUrl: null, status: 'pending' });
+    return NextResponse.json({ imageUrl: null, status: 'pending' });
+  });
+}
+
+export async function POST(req: NextRequest) {
+  const ip = req.headers.get('x-forwarded-for') || 'unknown-ip';
+  return withRequestContext(ip, async () => {
+    console.log('POST /api/album-art');
+    // No POST logic implemented
+    return NextResponse.json({ error: 'POST not implemented' }, { status: 405 });
+  });
 }

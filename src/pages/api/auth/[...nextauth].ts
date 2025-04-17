@@ -28,6 +28,18 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
   },
+  cookies: {
+    sessionToken: {
+      name: `__Secure-next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax", // Use "none" if you ever need true cross-site
+        path: "/",
+        secure: true,
+        domain: ".chron0.tech", // Support all subdomains
+      },
+    },
+  },
   callbacks: {
     async jwt({ token, account }) {
       // Persist the OAuth access_token to the token right after signin
