@@ -849,7 +849,7 @@ function handleClearParsed() {
               <Button
                 onClick={handleParseComments}
                 disabled={loading || !youtubeLink}
-                className="w-full rounded-md bg-blue-400 hover:bg-blue-500 text-white font-semibold shadow disabled:cursor-not-allowed"
+                className="w-full rounded-md bg-blue-700 hover:bg-blue-400 text-white font-semibold shadow disabled:cursor-not-allowed transition-colors duration-150"
               >
                 {loading && parsingState === 'Fetching & Parsing Comments / Description' ? (
                   <span className="flex items-center"><Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Parsing...</span>
@@ -876,8 +876,8 @@ function handleClearParsed() {
             )}
             {youtubeConnected && songs.length > 0 && (
               <Button
-                className="bg-[#f8d7da] hover:bg-[#fca5a5] text-white font-bold py-2 px-4 rounded flex items-center disabled:opacity-50 border border-[#fca5a5]"
-                style={{ boxShadow: '0 1px 4px #f8d7da33' }}
+                className="bg-[#c4302b] hover:bg-[#ff4e45] text-white font-bold py-2 px-4 rounded flex items-center disabled:opacity-50 border border-[#c4302b] transition-colors duration-150"
+                style={{ boxShadow: '0 1px 4px #c4302b33' }}
                 onClick={handleCreateYouTubePlaylist}
                 disabled={loading}
               >
