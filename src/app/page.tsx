@@ -999,13 +999,13 @@ export default function Home() {
         </div>
       )}
       {/* Footer */}
-      <footer className="w-full max-w-md mx-auto mt-12 mb-4 text-center text-xs text-gray-500">
+      <footer className="w-full max-w-md mx-auto mt-12 mb-4 text-center text-xs" style={{ color: '#222' }}>
         <hr className="mb-3" />
         <nav>
-          <a href="/docs/PRIVACY_POLICY.md" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary mr-4">Privacy Policy</a>
-          <a href="/docs/TERMS_OF_USE.md" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">Terms of Use</a>
+          <a href="/docs/PRIVACY_POLICY.md" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary mr-4" style={{ color: '#222' }}>Privacy Policy</a>
+          <a href="/docs/TERMS_OF_USE.md" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary" style={{ color: '#222' }}>Terms of Use</a>
         </nav>
-        <div className="mt-2">&copy; 2025 TuneFlow</div>
+        <div className="mt-2" style={{ color: '#222' }}>&copy; 2025 TuneFlow</div>
       </footer>
     </div>
   );
