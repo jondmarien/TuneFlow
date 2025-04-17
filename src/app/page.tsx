@@ -796,7 +796,11 @@ export default function Home() {
       </Card>
       <Card className="w-full max-w-md p-4 rounded-lg shadow-md bg-secondary">
         <CardHeader>
-          <CardTitle className="text-lg font-semibold">TuneFlow</CardTitle>
+          <CardTitle className="text-lg font-semibold flex justify-center items-center text-center w-full">
+            <span role="img" aria-label="music">🎵</span>
+            <span className="mx-2">TuneFlow</span>
+            <span role="img" aria-label="sparkles">✨</span>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {/* Input Mode Toggle */}
@@ -824,9 +828,14 @@ export default function Home() {
           </div>
           {/* YouTube Input Section */}
           <div className="space-y-2">
-            <div className="flex items-center space-x-2">
-              {youtubeIcon}
-              <Label htmlFor="youtube-link">YouTube Video Link</Label>
+            <div className="flex items-center space-x-2 justify-center">
+              <Label htmlFor="youtube-link" className="text-sm text-muted-foreground text-center w-full flex items-center justify-center">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="mr-2">
+                  <rect width="24" height="24" rx="4" fill="#FF0000"></rect>
+                  <path d="M9.5 16.913V7.093l6.857 4.91-6.857 4.91z" fill="#fff"></path>
+                </svg>
+                Youtube Video Link
+              </Label>
             </div>
             <Input
               id="youtube-link"
