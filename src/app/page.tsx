@@ -1003,7 +1003,9 @@ export default function Home() {
         <hr className="mb-3" />
         <nav>
           <a href="/privacy-policy" className="underline hover:text-primary mr-4 text-foreground">Privacy Policy</a>
-          <a href="/terms-of-use" className="underline hover:text-primary text-foreground">Terms of Use</a>
+          <a href="/terms-of-use" className="underline hover:text-primary mr-4 text-foreground">Terms of Use</a>
+          <a href="/gdpr-policy" className="underline hover:text-primary mr-4 text-foreground">GDPR Policy</a>
+          <a href="/data-opt-out" className="underline hover:text-primary text-foreground">Data Opt-Out</a>
         </nav>
         <div className="mt-2 text-foreground">&copy; 2025 TuneFlow</div>
       </footer>
