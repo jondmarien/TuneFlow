@@ -35,7 +35,7 @@ Here are some ideas and plans for expanding TuneFlow in the future:
 | Feature                        | Status        | Notes                                                                                       |
 |------------------------------- |--------------|--------------------------------------------------------------------------------------------|
 | 🎧 SoundCloud API Integration  | ⏸️ Paused     | Backend implemented, but feature is paused until API keys/support resume after May 2.       |
-| ▶️ YouTube Playlist Creation   | ✅ Done       | Create regular YouTube playlists directly from parsed tracks. (YouTube Music not supported.) |
+| ▶️ YouTube Playlist Creation   | ✅ Done       | Create regular YouTube playlists directly from parsed tracks. (YouTube Music not supported.) **Note: I need to get the app approved for public use on Google OAuth.** |
 | 🍏 Apple Music API             | 🕒 Planned    | Explore adding Apple Music integration for broader playlist export options.                 |
 | 🧠 Advanced Song Detection     | 🕒 Planned    | Detect songs in videos even without tracklists in description/comments using AI/audio.      |
 | 🎼 YT Music Connection         | 🕒 Planned    | Explore connecting to YouTube Music for playlist creation if supported by YouTube.          |
