@@ -644,12 +644,23 @@ const handleCreateYouTubePlaylist = async () => {
   }
   setLoading(true);
   try {
+    // --- Get videoIds from songs ---
     const videoIds = songs.map(song => song.videoId).filter((id): id is string => Boolean(id));
+
+    // --- Get YouTube video title for playlist name ---
+    let playlistTitle = 'TuneFlow Playlist';
+    const videoId = getYoutubeVideoId(youtubeLink);
+    if (videoId) {
+      const ytTitle = await fetchYoutubeTitle(videoId);
+      if (ytTitle) playlistTitle = ytTitle;
+    }
+
+    // --- Create playlist with correct title and videoIds ---
     const res = await fetch('/api/youtube/playlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        playlistName: playlistName || 'TuneFlow Playlist',
+        playlistName: playlistTitle,
         description: `Created with TuneFlow from YouTube comments`,
         videoIds: videoIds.length > 0 ? videoIds : undefined,
       }),
