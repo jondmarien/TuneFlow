@@ -12,6 +12,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster"; 
 import { DarkReaderFixWrapper } from '@/components/DarkReaderFixWrapper';
 import SessionProviderWrapper from "./SessionProviderWrapper";
+import ThemeToggle from '../components/ThemeToggle';
 
 // --- Font Setup ---
 const geistSans = Geist({
@@ -44,6 +45,7 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {/* Apply Dark Reader fix to avoid hydration issues */}
         <DarkReaderFixWrapper />
+        <ThemeToggle />
         <SessionProviderWrapper>
           {children}
         </SessionProviderWrapper>
