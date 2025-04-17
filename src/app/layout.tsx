@@ -11,6 +11,7 @@ import {Geist, Geist_Mono} from 'next/font/google';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"; 
 import { DarkReaderFixWrapper } from '@/components/DarkReaderFixWrapper';
+import SessionProviderWrapper from "./SessionProviderWrapper";
 
 // --- Font Setup ---
 const geistSans = Geist({
@@ -43,7 +44,9 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {/* Apply Dark Reader fix to avoid hydration issues */}
         <DarkReaderFixWrapper />
-        {children}
+        <SessionProviderWrapper>
+          {children}
+        </SessionProviderWrapper>
         {/* Global toast notifications */}
         <Toaster /> 
       </body>
