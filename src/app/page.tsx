@@ -146,8 +146,23 @@ export default function Home() {
   const youtubeConnected = hasAccessToken(session);
 
   // --- State Hooks ---
-  const [youtubeLink, setYoutubeLink] = useState("");
-  const [songs, setSongs] = useState<Song[]>([]);
+  function getSessionSongs() {
+    try {
+      const s = sessionStorage.getItem('parsedSongs');
+      return s ? JSON.parse(s) : [];
+    } catch {
+      return [];
+    }
+  }
+  function getSessionYoutubeLink() {
+    try {
+      return sessionStorage.getItem('youtubeLink') || '';
+    } catch {
+      return '';
+    }
+  }
+  const [youtubeLink, setYoutubeLink] = useState<string>(getSessionYoutubeLink());
+  const [songs, setSongs] = useState<Song[]>(getSessionSongs());
   const [loading, setLoading] = useState(false);
   const [useAiPlaylistName, setUseAiPlaylistName] = useState(false);
   const [playlistName, setPlaylistName] = useState<string>("");
@@ -209,6 +224,14 @@ export default function Home() {
 
     return () => clearInterval(interval);
   }, []);
+
+  // Persist youtubeLink and songs to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem('youtubeLink', youtubeLink);
+  }, [youtubeLink]);
+  useEffect(() => {
+    sessionStorage.setItem('parsedSongs', JSON.stringify(songs));
+  }, [songs]);
 
 // Helper to extract YouTube video ID
 function getYoutubeVideoId(url: string): string | null {
@@ -428,6 +451,10 @@ const handleParseComments = async () => {
   setCanCreatePlaylist(allSongs.length > 0);
   setParsingState(null);
   setLoading(false);
+
+  // Persist after parse
+  sessionStorage.setItem('youtubeLink', youtubeLink);
+  sessionStorage.setItem('parsedSongs', JSON.stringify(allSongs));
 
   if (errors.length) {
     toast({
@@ -685,12 +712,27 @@ const handleCreateYouTubePlaylist = async () => {
   }
 };
 
+function handleClearParsed() {
+  setYoutubeLink('');
+  setSongs([]);
+  sessionStorage.removeItem('youtubeLink');
+  sessionStorage.removeItem('parsedSongs');
+}
+
 // --- UI Rendering ---
   return (
     <div className="flex flex-col items-center justify-start min-h-screen p-4 bg-background text-foreground">
-      <Card className="mb-4">
-        <CardHeader>
+      <Card className="mb-4 relative">
+        <CardHeader className="flex flex-row items-start justify-between">
           <CardTitle>Service Connections</CardTitle>
+          {songs.length > 0 && (
+            <Button
+              className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded text-xs shadow absolute right-4 top-4"
+              onClick={handleClearParsed}
+            >
+              Clear Parsed Songs
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           <div className="flex space-x-4 items-center">
