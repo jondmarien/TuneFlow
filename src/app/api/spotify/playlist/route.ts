@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ name: playlistName, public: true, description: 'Created by TuneFlow. With <3 from Jon.' }),
+    body: JSON.stringify({ name: playlistName, public: true, description: 'Created by TuneFlow. With <3 from Jon. https://tuneflow.chron0.tech' }),
   });
 
   // Parse create playlist response
