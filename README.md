@@ -51,7 +51,6 @@ Here are some ideas and plans for expanding TuneFlow in the future:
 | 🎼 YT Music Connection         | 🕒 Planned    | Explore connecting to YouTube Music for playlist creation if supported by YouTube.          |
 | 🎧 SoundCloud API Integration  | ⏸️ Paused     | Backend implemented, but feature is paused until API keys/support resume after May 2.       |
 
-
 Have more ideas? Feel free to open an issue or submit a pull request!
 
 ---
