@@ -121,12 +121,16 @@ Contributions are welcome! Please open issues or submit pull requests for new fe
 
 ## 📝 Legal Documents
 
-This project displays its Privacy Policy and Terms of Use as styled pages.
+This project displays its Privacy Policy, Terms of Use, GDPR Policy, and Data Opt-Out as styled pages.
 
-If you clone this repo, you must provide `public/PRIVACY_POLICY.md` and `public/TERMS_OF_USE.md` for these pages to work. You can edit these markdown files to match your own requirements.
+If you clone this repo, you must provide the following markdown files in the `public/` directory for these pages to work. You can edit these files to match your own requirements:
 
-- Privacy Policy: `/privacy-policy`
-- Terms of Use: `/terms-of-use`
+- Privacy Policy: `public/PRIVACY_POLICY.md` → `/privacy-policy`
+- Terms of Use: `public/TERMS_OF_USE.md` → `/terms-of-use`
+- GDPR Policy: `public/GDPR_POLICY.md` → `/gdpr-policy`
+- Data Opt-Out: `public/DATA_OPT_OUT.md` → `/data-opt-out`
+
+Each page is accessible from the site footer. For GDPR compliance and user trust, make sure these documents are up to date and provide clear instructions for users to exercise their rights or opt out of data collection.
 
 ---
 
