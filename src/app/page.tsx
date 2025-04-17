@@ -697,7 +697,9 @@ const handleCreateYouTubePlaylist = async () => {
               {youtubeIcon}
               <span className={`font-semibold ${youtubeConnected ? 'text-red-600' : 'text-gray-400'}`}>YouTube</span>
               {youtubeConnected ? (
-                <span className="ml-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">Connected</span>
+                <span className="ml-1 text-xs px-2 py-0.5 rounded bg-[#f8d7da]" style={{ backgroundColor: '#f8d7da', color: '#f472b6', fontWeight: 600, border: '1px solid #fca5a5', minWidth: 90, display: 'inline-block', textAlign: 'center' }}>
+                  CONNECTED!
+                </span>
               ) : (
                 <Button variant="outline" size="sm" className="ml-2 border-red-500 text-red-600 hover:bg-red-50" onClick={() => signIn('google')}>Connect</Button>
               )}
@@ -705,9 +707,11 @@ const handleCreateYouTubePlaylist = async () => {
             {/* Spotify Connection Status + Connect Button */}
             <div className="flex items-center space-x-2">
               {spotifyIcon}
-              <span className={`font-semibold ${spotifyConnected ? 'text-black' : 'text-gray-400'}`}>Spotify</span>
+              <span className="font-semibold" style={{ color: '#1DB954' }}>Spotify</span>
               {spotifyConnected ? (
-                <span className="ml-1 text-xs bg-black text-white px-2 py-0.5 rounded">Connected</span>
+                <span className="ml-1 text-xs px-2 py-0.5 rounded bg-[#d1fae5]" style={{ backgroundColor: '#d1fae5', color: '#059669', fontWeight: 600, border: '1px solid #6ee7b7', minWidth: 90, display: 'inline-block', textAlign: 'center' }}>
+                  CONNECTED!
+                </span>
               ) : (
                 <Button
                   variant="outline"
@@ -733,106 +737,112 @@ const handleCreateYouTubePlaylist = async () => {
           <CardTitle className="text-lg font-semibold">TuneFlow</CardTitle>
         </CardHeader>
         <CardContent>
-          {/* Only show Create Playlist on YouTube if connected */}
-          {youtubeConnected && (
-            <Button
-              className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded flex items-center disabled:opacity-50 mb-4"
-              onClick={handleCreateYouTubePlaylist}
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 mr-2"><path d="M21.593 7.203a2.41 2.41 0 00-1.687-1.687C18.244 5.008 12 5.008 12 5.008s-6.244 0-7.906.508a2.41 2.41 0 00-1.687 1.687C2.008 8.865 2.008 12 2.008 12s0 3.135.508 4.797a2.41 2.41 0 001.687 1.687c1.662.508 7.906.508 7.906.508s6.244 0 7.906-.508a2.41 2.41 0 001.687-1.687C21.992 15.135 21.992 12 21.992 12s0-3.135-.407-4.797zM9.5 16.913V7.093l6.857 4.91 0 0-6.857 4.91z"></path></svg>
-              Create Playlist on YouTube
-            </Button>
-          )}
-           {/* YouTube Input Section */}
-           <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                {youtubeIcon}
-                <Label htmlFor="youtube-link">YouTube Video Link</Label>
-              </div>
-              <Input
-                id="youtube-link"
-                type="url"
-                placeholder="Enter YouTube Video URL (e.g., ...watch?v=...)"
-                value={youtubeLink}
-                onChange={(e) => setYoutubeLink(e.target.value)}
-                className="rounded-md"
+          {/* YouTube Input Section */}
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              {youtubeIcon}
+              <Label htmlFor="youtube-link">YouTube Video Link</Label>
+            </div>
+            <Input
+              id="youtube-link"
+              type="url"
+              placeholder="Enter YouTube Video URL (e.g., ...watch?v=...)"
+              value={youtubeLink}
+              onChange={(e) => setYoutubeLink(e.target.value)}
+              className="rounded-md"
+              disabled={loading}
+            />
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="scan-comments"
+                checked={scanComments}
+                onCheckedChange={(checked) => setScanComments(Boolean(checked))}
                 disabled={loading}
               />
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="scan-comments"
-                  checked={scanComments}
-                  onCheckedChange={(checked) => setScanComments(Boolean(checked))}
-                  disabled={loading}
-                />
-                <Label htmlFor="scan-comments" className="text-sm text-muted-foreground">
-                  Scan YouTube Comments for Songs
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2 pl-7">
-                <Checkbox
-                  id="prioritize-pinned"
-                  checked={prioritizePinned}
-                  onCheckedChange={(checked) => setPrioritizePinned(Boolean(checked))}
-                  disabled={!scanComments || loading}
-                />
-                <Label htmlFor="prioritize-pinned" className="text-xs text-muted-foreground">
-                  Prioritize Pinned Comments (if available)
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="scan-description"
-                  checked={scanDescription}
-                  onCheckedChange={(checked) => setScanDescription(Boolean(checked))}
-                  disabled={loading}
-                />
-                <Label htmlFor="scan-description" className="text-sm text-muted-foreground">
-                  Scan Description for Songs
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="scan-chapters"
-                  checked={scanChapters}
-                  onCheckedChange={(checked) => setScanChapters(Boolean(checked))}
-                  disabled={loading}
-                />
-                <Label htmlFor="scan-chapters" className="text-sm text-muted-foreground">
-                  Scan YouTube Chapters for Songs
-                </Label>
-              </div>
-              <span
-                title={spotifyConnected !== true ? "Please login to Spotify" : undefined}
-                className="block w-full"
+              <Label htmlFor="scan-comments" className="text-sm text-muted-foreground">
+                Scan YouTube Comments for Songs
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2 pl-7">
+              <Checkbox
+                id="prioritize-pinned"
+                checked={prioritizePinned}
+                onCheckedChange={(checked) => setPrioritizePinned(Boolean(checked))}
+                disabled={!scanComments || loading}
+              />
+              <Label htmlFor="prioritize-pinned" className="text-xs text-muted-foreground">
+                Prioritize Pinned Comments (if available)
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="scan-description"
+                checked={scanDescription}
+                onCheckedChange={(checked) => setScanDescription(Boolean(checked))}
+                disabled={loading}
+              />
+              <Label htmlFor="scan-description" className="text-sm text-muted-foreground">
+                Scan Description for Songs
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="scan-chapters"
+                checked={scanChapters}
+                onCheckedChange={(checked) => setScanChapters(Boolean(checked))}
+                disabled={loading}
+              />
+              <Label htmlFor="scan-chapters" className="text-sm text-muted-foreground">
+                Scan Chapters for Songs
+              </Label>
+            </div>
+            <span
+              title={spotifyConnected !== true ? "Please login to Spotify" : undefined}
+              className="block w-full"
+            >
+              <Button
+                onClick={handleParseComments}
+                disabled={loading || !youtubeLink || spotifyConnected !== true}
+                className="w-full rounded-md bg-blue-400 hover:bg-blue-500 text-white font-semibold shadow disabled:cursor-not-allowed"
               >
-                <Button
-                  onClick={handleParseComments}
-                  disabled={loading || !youtubeLink || spotifyConnected !== true}
-                  className="w-full rounded-md bg-blue-400 hover:bg-blue-500 text-white font-semibold shadow disabled:cursor-not-allowed"
-                >
-                  {loading && parsingState === 'Fetching & Parsing Comments / Description' ? (
-                    <span className="flex items-center"><Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Parsing...</span>
-                  ) : (
-                    'Parse YouTube Video Information'
-                  )}
-                </Button>
-              </span>
-            </div>
+                {loading && parsingState === 'Fetching & Parsing Comments / Description' ? (
+                  <span className="flex items-center"><Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Parsing...</span>
+                ) : (
+                  'Parse YouTube Video Information'
+                )}
+              </Button>
+            </span>
+          </div>
 
-            {/* Spotify Connect Section */}
-            <div className="w-full flex justify-center my-4">
-              {spotifyConnected === null ? (
-                <span className="text-gray-500">Checking Spotify status...</span>
-              ) : spotifyConnected ? (
-                <span className="rounded px-4 py-2 bg-green-100 text-green-800 font-semibold">CONNECTED!</span>
-              ) : (
-                <></>
-              )}
-            </div>
+          {/* Move grouped playlist buttons below input section */}
+          <div className="flex flex-col gap-2 my-6">
+            {spotifyConnected && songs.length > 0 && (
+              <Button
+                className="bg-[#1DB954] hover:bg-[#1ed760] text-white font-bold py-2 px-4 rounded flex items-center disabled:opacity-50"
+                onClick={handleCreatePlaylist}
+                disabled={loading}
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 mr-2">
+                  <path d="M12 0C5.371 0 0 5.371 0 12c0 6.627 5.371 12 12 12s12-5.373 12-12C24 5.371 18.629 0 12 0zm5.379 17.414a.956.956 0 0 1-1.313.318c-3.594-2.203-8.146-2.695-13.521-1.461a.958.958 0 1 1-.428-1.871c5.771-1.319 10.771-.771 14.707 1.631a.956.956 0 0 1 .555 1.383zm1.188-2.635a1.195 1.195 0 0 1-1.638.398c-4.109-2.527-10.381-3.266-15.229-1.77a1.197 1.197 0 1 1-.674-2.302c5.381-1.572 12.184-.752 16.824 2.047a1.195 1.195 0 0 1 .517 1.627zm.125-2.693C15.547 9.76 8.453 9.719 4.063 11.063a1.436 1.436 0 1 1-.812-2.754c5.016-1.482 13.016-1.438 17.688 1.125a1.438 1.438 0 0 1-1.438 2.484z" fill="#fff"/>
+                </svg>
+                Create Playlist on Spotify
+              </Button>
+            )}
+            {youtubeConnected && songs.length > 0 && (
+              <Button
+                className="bg-[#f8d7da] hover:bg-[#fca5a5] text-white font-bold py-2 px-4 rounded flex items-center disabled:opacity-50 border border-[#fca5a5]"
+                style={{ boxShadow: '0 1px 4px #f8d7da33' }}
+                onClick={handleCreateYouTubePlaylist}
+                disabled={loading}
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 mr-2"><path d="M21.593 7.203a2.41 2.41 0 00-1.687-1.687C18.244 5.008 12 5.008 12 5.008s-6.244 0-7.906.508a2.41 2.41 0 00-1.687 1.687C2.008 8.865 2.008 12 2.008 12s0 3.135.508 4.797a2.41 2.41 0 001.687 1.687c1.662.508 7.906.508 7.906.508s6.244 0 7.906-.508a2.41 2.41 0 001.687-1.687C21.992 15.135 21.992 12 21.992 12s0-3.135-.407-4.797zM9.5 16.913V7.093l6.857 4.91 0 0-6.857 4.91z"></path></svg>
+                <span style={{ color: 'white' }}>Create Playlist on YouTube</span>
+              </Button>
+            )}
+          </div>
 
-            {/* Spotify Playlist Creation Section - Enabled after successful parsing */}
-            {canCreatePlaylist && (
+          {/* Spotify Playlist Creation Section - Enabled after successful parsing */}
+          {canCreatePlaylist && (
             <div className="space-y-2 pt-4 border-t">
               <div className="flex items-center gap-2 pb-2">
                 <Checkbox
@@ -846,29 +856,6 @@ const handleCreateYouTubePlaylist = async () => {
                 </Label>
                 <span className="text-xs italic" style={{ color: 'red' }}>(DISABLED UNTIL I CAN FIND A SUITABLE FIX)</span>
               </div>
-              <Button
-                onClick={handleCreatePlaylist}
-                disabled={loading || songs.length === 0}
-                className="w-full rounded-md bg-green-600 text-white hover:bg-green-700 disabled:bg-green-800"
-              >
-                {loading && (parsingState?.includes('Spotify') || parsingState === 'Finding Songs on Spotify' || parsingState === 'Creating Playlist' || parsingState?.includes('Searching:')) ? (
-                  <>
-                    <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                    {parsingState}
-                  </>
-                ) : (
-                  useAiPlaylistName ? "Create AI-Named Playlist" : "Create Spotify Playlist"
-                )}
-              </Button>
-              {loading && parsingState === 'Finding Songs on Spotify' && (
-                <button
-                  onClick={handleStopPlaylist}
-                  className="w-full mt-2 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold flex items-center justify-center shadow"
-                  style={{ borderRadius: '0.75rem', backgroundColor: '#dc2626' }}
-                >
-                  <span style={{ fontWeight: 700, fontSize: '1.1rem' }}>■ STOP</span>
-                </button>
-              )}
             </div>
           )}
         </CardContent>
