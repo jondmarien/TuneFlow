@@ -34,12 +34,12 @@ Here are some ideas and plans for expanding TuneFlow in the future:
 
 | Feature                        | Status        | Notes                                                                                       |
 |------------------------------- |--------------|--------------------------------------------------------------------------------------------|
-| 🎧 SoundCloud API Integration  | ⏸️ Paused     | Backend implemented, but feature is paused until API keys/support resume after May 2.       |
 | ▶️ YouTube Playlist Creation   | ✅ Done       | Create regular YouTube playlists directly from parsed tracks. (YouTube Music not supported.) **Note: I need to get the app approved for public use on Google OAuth.** |
+| 🌗 Day/Night Toggle             | 🚧 In Progress | Implement a seamless toggle between light and dark modes, allowing users to switch themes for optimal comfort and accessibility at any time. |
 | 🍏 Apple Music API             | 🕒 Planned    | Explore adding Apple Music integration for broader playlist export options.                 |
 | 🧠 Advanced Song Detection     | 🕒 Planned    | Detect songs in videos even without tracklists in description/comments using AI/audio.      |
 | 🎼 YT Music Connection         | 🕒 Planned    | Explore connecting to YouTube Music for playlist creation if supported by YouTube.          |
-| 🌗 Day/Night Toggle             | 🚧 In Progress | Implement a seamless toggle between light and dark modes, allowing users to switch themes for optimal comfort and accessibility at any time. |
+| 🎧 SoundCloud API Integration  | ⏸️ Paused     | Backend implemented, but feature is paused until API keys/support resume after May 2.       |
 
 Have more ideas? Feel free to open an issue or submit a pull request!
 
