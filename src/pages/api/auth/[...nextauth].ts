@@ -3,7 +3,6 @@ import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import type { NextAuthOptions } from "next-auth";
 
-
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
@@ -21,9 +20,6 @@ export const authOptions: NextAuthOptions = {
             "https://www.googleapis.com/auth/youtube.upload",
             "https://www.googleapis.com/auth/youtube.channel-memberships.creator",
             "https://www.googleapis.com/auth/youtubepartner",
-            "https://www.googleapis.com/auth/youtube.playlist.readonly",
-            "https://www.googleapis.com/auth/youtube.playlist",
-            "https://www.googleapis.com/auth/youtube.playlist.upload",
           ].join(" "),
         },
       },
@@ -50,5 +46,4 @@ export const authOptions: NextAuthOptions = {
   },
 };
 
-const handler = NextAuth(authOptions);
-export { handler as GET, handler as POST };
+export default NextAuth(authOptions);
