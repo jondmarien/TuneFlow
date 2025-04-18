@@ -182,6 +182,7 @@ export default function Home() {
   const [failedAlbumArtSongs, setFailedAlbumArtSongs] = useState<Song[]>([]);
   const [spotifySearchStatus, setSpotifySearchStatus] = useState<'idle' | 'searching' | 'done'>('idle');
   const [spotifySongSearches, setSpotifySongSearches] = useState<{ song: Song; status: 'pending' | 'searching' | 'found' | 'not_found' }[]>([]);
+  const [currentSpotifySearchSong, setCurrentSpotifySearchSong] = useState<Song | null>(null);
 
   // --- Effects ---
 
@@ -607,6 +608,7 @@ export default function Home() {
     setLoading(true);
     setSpotifySearchStatus('searching');
     setSpotifySongSearches(songs.map(song => ({ song, status: 'pending' })));
+    setCurrentSpotifySearchSong(null); // Reset before starting
     const playlistToast = toast({ title: 'Starting Playlist Creation...', description: 'Please wait...', position: 'top-left' });
     setParsingState("Finding Songs on Spotify");
     let finalPlaylistName = playlistName;
@@ -636,6 +638,7 @@ export default function Home() {
       let failedSongs: Song[] = [];
       for (let i = 0; i < songs.length; i++) {
         if (abortPlaylist) throw new Error('Playlist creation stopped by user.');
+        setCurrentSpotifySearchSong(songs[i]); // <-- Set current song being searched
         setSpotifySongSearches(prev => prev.map((entry, idx) => idx === i ? { ...entry, status: 'searching' } : entry));
         const uri = await robustSpotifyTrackSearch(songs[i], abortController.signal);
         if (uri) {
@@ -644,6 +647,11 @@ export default function Home() {
         } else {
           failedSongs.push(songs[i]);
           setSpotifySongSearches(prev => prev.map((entry, idx) => idx === i ? { ...entry, status: 'not_found' } : entry));
+          setFailedAlbumArtSongs(prev => {
+            // Only add if not already present
+            if (prev.find(s => s.title === songs[i].title && s.artist === songs[i].artist)) return prev;
+            return [...prev, songs[i]];
+          });
           // Try fallback album art for failed songs (iTunes, then MusicBrainz)
           fetchFallbackAlbumArt(songs[i]).then((art) => {
             if (art) {
@@ -652,8 +660,18 @@ export default function Home() {
           });
         }
       }
+      setCurrentSpotifySearchSong(null); // Clear at the end
       setSpotifySearchStatus('done');
-      setFailedAlbumArtSongs(prev => [...prev, ...failedSongs]);
+      setFailedAlbumArtSongs(prev => {
+        // Only add missing failedSongs (should be a no-op if already added above)
+        const all = [...prev];
+        for (const fs of failedSongs) {
+          if (!all.find(s => s.title === fs.title && s.artist === fs.artist)) {
+            all.push(fs);
+          }
+        }
+        return all;
+      });
       // Fetch Spotify user ID
       if (abortPlaylist) throw new Error('Playlist creation stopped by user.');
       const userRes = await fetch('/api/spotify/me', { signal: abortController.signal });
@@ -750,6 +768,7 @@ export default function Home() {
       }
     } catch (err: any) {
       setSpotifySearchStatus('idle');
+      setCurrentSpotifySearchSong(null);
       if (err.name === 'AbortError' || err.message === 'Playlist creation stopped by user.') {
         toast({
           title: 'Playlist Creation Stopped',
@@ -775,6 +794,7 @@ export default function Home() {
       setParsingState(null);
       setAbortPlaylist(false);
       setPlaylistAbortController(null);
+      setCurrentSpotifySearchSong(null);
     }
   };
 
@@ -1105,19 +1125,22 @@ export default function Home() {
                 </Label>
                 <span className="text-xs italic" style={{ color: 'red' }}>(DISABLED UNTIL I CAN FIND A SUITABLE FIX)</span>
               </div>
-              <div className="flex justify-center w-full">
-                {spotifySearchStatus === 'searching' && (
-                  <span className="flex items-center text-sm text-yellow-600">
-                    <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                    Searching Spotify for Songs
-                  </span>
-                )}
-                {spotifySearchStatus === 'done' && (
-                  <span className="flex items-center text-sm text-green-600 font-bold">
-                    DONE
-                  </span>
-                )}
-              </div>
+              {/* --- Current Spotify Song Search Status --- */}
+              {spotifySearchStatus === 'searching' && (
+                <div className="flex items-center text-sm text-yellow-600">
+                  <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
+                  {currentSpotifySearchSong ? (
+                    <span>Searching for: <span className="font-semibold">{currentSpotifySearchSong.title}</span> by <span className="font-semibold">{currentSpotifySearchSong.artist}</span></span>
+                  ) : (
+                    <span>Searching Spotify for Songs</span>
+                  )}
+                </div>
+              )}
+              {spotifySearchStatus === 'done' && (
+                <span className="flex items-center text-sm text-green-600 font-bold">
+                  DONE
+                </span>
+              )}
             </div>
           )}
         </CardContent>
