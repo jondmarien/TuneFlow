@@ -7,6 +7,10 @@
  * - ParseYouTubeCommentOutput - The return type for the parseYouTubeComment function.
  */
 
+// --- Batching and Prompt Length Constants ---
+const MAX_PROMPT_LENGTH = 2048; // Truncate input text above this length
+const BATCH_SIZE = 5; // How many comments to batch per AI call
+
 import {ai} from '@/ai/ai-instance';
 import {z} from 'genkit';
 import { getTrackAlbumArt } from '@/services/spotify-service';
@@ -279,10 +283,6 @@ const parseYouTubeCommentFlow = ai.defineFlow<
       cleaned = cleaned.replace(/\s+/g, ' ').trim();
       return cleaned;
     }
-
-    // --- Batching and Prompt Length Constants ---
-    const MAX_PROMPT_LENGTH = 2048; // Truncate input text above this length
-    const BATCH_SIZE = 5; // How many comments to batch per AI call
 
     // --- Step 1 & 2: Batching and Prompt Length Logging ---
     function logAndTruncate(text: string, label: string): string {

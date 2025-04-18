@@ -59,7 +59,8 @@ async function fetchVideoDetails(videoId: string) {
  */
 function parseChaptersFromDescription(description: string) {
   const lines = description.split(/\r?\n/);
-  const chapterRegex = /^(\d{1,2}:\d{2}(?::\d{2})?)\s+(.+)/;
+  // Improved regex: supports dashes, dots, pipes, multiple whitespace, etc.
+  const chapterRegex = /^(\d{1,2}:\d{2}(?::\d{2})?)\s*[-–—.|]*\s*(.+)$/;
   const chapters: { start: string, title: string }[] = [];
   for (const line of lines) {
     const match = line.match(chapterRegex);
