@@ -952,6 +952,19 @@ export default function Home() {
   }
 
   // --- UI Rendering ---
+  // --- Hash helper for unique song keys ---
+  function hashSong(song: Song): string {
+    // Use a simple hash: title|artist|imageUrl|videoId (if present)
+    const base = `${song.title ?? ''}|${song.artist ?? ''}|${song.imageUrl ?? ''}|${song.videoId ?? ''}`;
+    let hash = 0, i, chr;
+    for (i = 0; i < base.length; i++) {
+      chr = base.charCodeAt(i);
+      hash = ((hash << 5) - hash) + chr;
+      hash |= 0; // Convert to 32bit int
+    }
+    return 'song-' + Math.abs(hash).toString(36);
+  }
+
   return (
     <div className="flex flex-col items-center justify-start min-h-screen p-4 bg-background text-foreground">
       <Card className="mb-4 relative">
@@ -1156,7 +1169,7 @@ export default function Home() {
                 <Checkbox
                   id="ai-playlist-name"
                   checked={useAiPlaylistName}
-                  onCheckedChange={() => {}}
+                  onCheckedChange={(checked) => {}}
                   disabled
                 />
                 <Label htmlFor="ai-playlist-name" className="text-sm text-muted-foreground">
@@ -1220,7 +1233,7 @@ export default function Home() {
           <CardContent>
             <ul className="space-y-2 max-h-60 overflow-y-auto">
               {songs.map((song) => (
-                <SongItem key={`${song.title}-${song.artist}`} song={song} onFail={(failedSong) => {
+                <SongItem key={hashSong(song)} song={song} onFail={(failedSong) => {
                   setFailedAlbumArtSongs((prev) => {
                     // Only add if not already present
                     if (prev.find(s => s.title === failedSong.title && s.artist === failedSong.artist)) return prev;
@@ -1247,8 +1260,8 @@ export default function Home() {
             </div>
             <div className="p-6 pt-0">
               <ul className="space-y-2 max-h-60 overflow-y-auto">
-                {failedAlbumArtSongs.map(song => (
-                  <li key={`fail-${song.title}-${song.artist}`} className="flex items-center text-sm border-b pb-1">
+                {failedAlbumArtSongs.map((song) => (
+                  <li key={`fail-${hashSong(song)}`} className="flex items-center text-sm border-b pb-1">
                     <div className="w-10 h-10 flex items-center justify-center bg-gray-200 rounded mr-3 border text-xs text-gray-500">N/A</div>
                     <div>
                       <div className="font-semibold">{song.title}</div>
