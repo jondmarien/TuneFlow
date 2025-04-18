@@ -8,6 +8,8 @@ interface FailedSongsListProps {
 
 const hashSong = (song: Song) => `${song.title}|${song.artist}`;
 
+// This component is now unused due to the new FailedAlbumArtList and FailedSpotifySongsList components.
+// You may safely delete this file to avoid confusion and dead code.
 export const FailedSongsList: React.FC<FailedSongsListProps> = ({ failedSongs }) => {
   if (failedSongs.length === 0) return null;
   return (

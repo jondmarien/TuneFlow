@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PlaylistNameForm } from "@/components/PlaylistNameForm";
 import { YoutubeIcon, SpotifyIcon } from "@/components/CustomIcons";
+import { FailedSpotifySongsList } from "@/components/FailedSpotifySongsList";
 
 // Song type definition
 export type Song = {
@@ -26,6 +27,7 @@ interface PlaylistCreateFormProps {
   onSuccess?: (playlistUrl: string) => void;
   onError?: (error: string) => void;
   youtubeLink?: string;
+  failedAlbumArtSongs: Song[];
 }
 
 export function PlaylistCreateForm({
@@ -39,6 +41,7 @@ export function PlaylistCreateForm({
   onSuccess,
   onError,
   youtubeLink = "",
+  failedAlbumArtSongs,
 }: PlaylistCreateFormProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -50,6 +53,7 @@ export function PlaylistCreateForm({
   const [spotifyAllSongsFound, setSpotifyAllSongsFound] = useState<boolean | null>(null);
   const [abortPlaylist, setAbortPlaylist] = useState(false);
   const [playlistAbortController, setPlaylistAbortController] = useState<AbortController | null>(null);
+  const [failedSpotifySongs, setFailedSpotifySongs] = useState<Song[]>([]);
 
   // Helper to extract YouTube video ID (robust)
   function getYoutubeVideoId(url: string): string | null {
@@ -224,6 +228,7 @@ export function PlaylistCreateForm({
         setCurrentSpotifySearchSong(null);
         setSpotifySearchStatus('done');
         setSpotifyAllSongsFound(failedSongs.length === 0);
+        setFailedSpotifySongs(failedSongs);
         if (abortPlaylist) throw new Error('Playlist creation stopped by user.');
         // Fetch Spotify user ID
         const userRes = await fetch('/api/spotify/me', { signal: abortController.signal });
@@ -273,20 +278,30 @@ export function PlaylistCreateForm({
           });
           setLoading(false);
           setSpotifySearchStatus('idle');
+          setFailedSpotifySongs(failedSongs);
           return;
         } else {
           setSpotifyPlaylistUrl(createData.playlistUrl || null);
           setSpotifyAllSongsFound(failedSongs.length === 0);
+          // Remove any false positives: only show as failed if NOT in the playlist (if playlistUrl present)
+          if (createData.addedTracks) {
+            // createData.addedTracks should be an array of objects or strings with title/artist info
+            setFailedSpotifySongs(failedSongs.filter(song => {
+              // Check if song is not in the addedTracks list
+              return !createData.addedTracks.some((added: any) => {
+                // Fuzzy match by title and artist
+                return (
+                  (added.title && added.title.toLowerCase() === song.title.toLowerCase()) &&
+                  (added.artist && added.artist.toLowerCase() === song.artist.toLowerCase())
+                );
+              });
+            }));
+          }
           toast({
             title: 'Playlist Created!',
             description: (
               <span>
-                Playlist '{finalPlaylistName}' created successfully!{' '}
-                {createData.playlistUrl && (
-                  <a href={createData.playlistUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#22c55e', fontWeight: 'bold', textDecoration: 'underline' }}>
-                    Open Playlist
-                  </a>
-                )}
+                Playlist '{finalPlaylistName}' created successfully!
               </span>
             ),
             variant: 'default',
@@ -420,15 +435,27 @@ export function PlaylistCreateForm({
           disabled={loading || !connected || songs.length === 0}
         >
           {loading && service === 'spotify' && spotifySearchStatus === 'searching' && currentSpotifySearchSong ? (
-            <span>
-              Searching for <span className="font-semibold">{currentSpotifySearchSong.title}</span> by <span className="font-semibold">{currentSpotifySearchSong.artist}</span>...
-            </span>
+            "Searching..."
           ) : loading ? (
             "Creating..."
           ) : (
             `Create ${service === "spotify" ? "Spotify" : "YouTube"} Playlist`
           )}
         </Button>
+        {/* Show 'Searching for x song' below the button when searching for a Spotify song */}
+        {loading && service === 'spotify' && spotifySearchStatus === 'searching' && currentSpotifySearchSong && (
+          <div className="flex flex-col items-center justify-center mt-2 w-full">
+            <div className="flex items-center">
+              <svg className="animate-spin h-5 w-5 text-orange-500 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+              </svg>
+              <span className="text-orange-600 font-medium text-center">
+                Searching for <b>{currentSpotifySearchSong.title}</b> by <b>{currentSpotifySearchSong.artist}</b>.
+              </span>
+            </div>
+          </div>
+        )}
         {/* STOP/ABORT PLAYLIST BUTTON: Only show if loading/creating and playlist is not yet created */}
         {loading && !playlistUrl && (
           <Button
@@ -439,12 +466,9 @@ export function PlaylistCreateForm({
             Stop / Abort Playlist Creation
           </Button>
         )}
-        {playlistUrl && (
-          <div className="mt-4 text-center">
-            <a href={playlistUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-bold">
-              Open Playlist
-            </a>
-          </div>
+        {/* Failed Spotify Songs List: only show after playlist creation/search */}
+        {service === 'spotify' && !loading && spotifySearchStatus === 'done' && failedSpotifySongs.length > 0 && (
+          <FailedSpotifySongsList failedSpotifySongs={failedSpotifySongs} />
         )}
       </CardContent>
     </Card>

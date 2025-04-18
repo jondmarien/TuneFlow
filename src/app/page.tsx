@@ -37,6 +37,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { YoutubeStatusBanner } from "@/components/YoutubeStatusBanner";
 import { ParsedSongsList } from "@/components/ParsedSongsList";
 import { FailedSongsList } from "@/components/FailedSongsList";
+import { FailedAlbumArtList } from "@/components/FailedAlbumArtList";
 
 // Define Song type locally or in a shared types file if needed elsewhere
 type Song = {
@@ -674,7 +675,7 @@ export default function Home() {
                     />
                   </div>
                   <div className="flex-1 flex flex-col items-center justify-center">
-                    <FailedSongsList failedSongs={failedAlbumArtSongs} />
+                    <FailedAlbumArtList failedAlbumArtSongs={failedAlbumArtSongs} />
                   </div>
                 </div>
               )}
@@ -691,79 +692,92 @@ export default function Home() {
             </div>
           </div>
           {/* Swipable Playlist Creation Cards (Tabs) Below */}
-          <div className="w-full flex flex-col items-center mt-8">
-            <div className="w-full max-w-md">
-              <Tabs value={selectedService} onValueChange={setSelectedService} className="w-full">
-                <TabsList className="w-full flex justify-between mb-4">
-                  <TabsTrigger value="youtube" className="flex-1">YouTube Playlist</TabsTrigger>
-                  <TabsTrigger value="spotify" className="flex-1">Spotify Playlist</TabsTrigger>
-                </TabsList>
-                <TabsContent value="youtube">
-                  <PlaylistCreateForm
-                    songs={songs}
-                    service="youtube"
-                    playlistName={playlistName}
-                    setPlaylistName={setPlaylistName}
-                    useAiPlaylistName={useAiPlaylistName}
-                    setUseAiPlaylistName={setUseAiPlaylistName}
-                    connected={youtubeConnected}
-                    youtubeLink={youtubeLink}
-                    onSuccess={(url) => {
-                      toast({
-                        title: 'YouTube Playlist Created!',
-                        description: (
-                          <span>
-                            Playlist created successfully!{' '}
-                            {url && (
-                              <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#ef4444', fontWeight: 'bold', textDecoration: 'underline' }}>
-                                Open Playlist
-                              </a>
-                            )}
-                          </span>
-                        ),
-                        variant: 'default',
-                        duration: 10000,
-                        position: 'top-right',
-                      });
-                    }}
-                    onError={(err) => toast({ title: 'YouTube Playlist Error', description: err, variant: 'destructive', position: 'top-left' })}
-                  />
-                </TabsContent>
-                <TabsContent value="spotify">
-                  <PlaylistCreateForm
-                    songs={songs}
-                    service="spotify"
-                    playlistName={playlistName}
-                    setPlaylistName={setPlaylistName}
-                    useAiPlaylistName={useAiPlaylistName}
-                    setUseAiPlaylistName={setUseAiPlaylistName}
-                    connected={!!spotifyConnected}
-                    youtubeLink={youtubeLink}
-                    onSuccess={(url) => {
-                      setSpotifyPlaylistUrl(url);
-                      setSpotifyAllSongsFound(true); // Assume all found for now
-                      toast({
-                        title: 'Spotify Playlist Created!',
-                        description: (
-                          <span>
-                            Playlist created successfully!{' '}
-                            {url && (
-                              <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#22c55e', fontWeight: 'bold', textDecoration: 'underline' }}>
-                                Open Playlist
-                              </a>
-                            )}
-                          </span>
-                        ),
-                        variant: 'default',
-                        duration: 10000,
-                        position: 'top-right',
-                      });
-                    }}
-                    onError={(err) => toast({ title: 'Spotify Playlist Error', description: err, variant: 'destructive', position: 'top-left' })}
-                  />
-                </TabsContent>
-              </Tabs>
-            </div>
+          <div className="w-full max-w-md mt-8">
+            <Tabs value={selectedService} onValueChange={setSelectedService} className="w-full">
+              <TabsList className="w-full flex justify-between mb-4">
+                <TabsTrigger value="youtube" className="flex-1">YouTube Playlist</TabsTrigger>
+                <TabsTrigger value="spotify" className="flex-1">Spotify Playlist</TabsTrigger>
+              </TabsList>
+              <TabsContent value="youtube">
+                <PlaylistCreateForm
+                  songs={songs}
+                  service="youtube"
+                  playlistName={playlistName}
+                  setPlaylistName={setPlaylistName}
+                  useAiPlaylistName={useAiPlaylistName}
+                  setUseAiPlaylistName={setUseAiPlaylistName}
+                  connected={!!youtubeConnected}
+                  youtubeLink={youtubeLink}
+                  onSuccess={(url) => {
+                    toast({
+                      title: 'YouTube Playlist Created!',
+                      description: (
+                        <span>
+                          Playlist created successfully!{' '}
+                          {url && (
+                            <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#ef4444', fontWeight: 'bold', textDecoration: 'underline' }}>
+                              Open Playlist
+                            </a>
+                          )}
+                        </span>
+                      ),
+                      variant: 'default',
+                      duration: 10000,
+                      position: 'top-right',
+                    });
+                  }}
+                  onError={(err) => toast({ title: 'YouTube Playlist Error', description: err, variant: 'destructive', position: 'top-left' })}
+                  failedAlbumArtSongs={failedAlbumArtSongs}
+                />
+              </TabsContent>
+              <TabsContent value="spotify">
+                <PlaylistCreateForm
+                  songs={songs}
+                  service="spotify"
+                  playlistName={playlistName}
+                  setPlaylistName={setPlaylistName}
+                  useAiPlaylistName={useAiPlaylistName}
+                  setUseAiPlaylistName={setUseAiPlaylistName}
+                  connected={!!spotifyConnected}
+                  youtubeLink={youtubeLink}
+                  onSuccess={(url) => {
+                    setSpotifyPlaylistUrl(url);
+                    setSpotifyAllSongsFound(true);
+                    toast({
+                      title: 'Spotify Playlist Created!',
+                      description: (
+                        <span>
+                          Playlist created successfully!{' '}
+                          {url && (
+                            <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#22c55e', fontWeight: 'bold', textDecoration: 'underline' }}>
+                              Open Playlist
+                            </a>
+                          )}
+                        </span>
+                      ),
+                      variant: 'default',
+                      duration: 10000,
+                      position: 'top-right',
+                    });
+                  }}
+                  onError={(err) => toast({ title: 'Spotify Playlist Error', description: err, variant: 'destructive', position: 'top-left' })}
+                  failedAlbumArtSongs={failedAlbumArtSongs}
+                />
+                {/* Render link to Spotify playlist after successful creation */}
+                {selectedService === 'spotify' && spotifyPlaylistUrl && (
+                  <div className="mt-4 text-center">
+                    <a
+                      href={spotifyPlaylistUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: '#22c55e', fontWeight: 'bold', textDecoration: 'underline', fontSize: '1.1rem' }}
+                    >
+                      Open Playlist
+                    </a>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </div>
           {/* Footer */}
           <footer className="w-full max-w-md mx-auto mt-12 mb-4 text-center text-xs text-foreground">
