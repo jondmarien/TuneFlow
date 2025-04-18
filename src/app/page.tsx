@@ -63,24 +63,37 @@ export default function Home() {
   const { data: session, status } = useSession();
   const youtubeConnected = hasAccessToken(session);
 
-  // --- State Hooks ---
-  function getSessionSongs() {
-    try {
+  // --- Hydration-safe state for client-only data ---
+  const [mounted, setMounted] = useState(false);
+  const [youtubeLink, setYoutubeLink] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('youtubeLink') || '';
+    }
+    return '';
+  });
+  const [songs, setSongs] = useState<Song[]>(() => {
+    if (typeof window !== 'undefined') {
       const s = sessionStorage.getItem('parsedSongs');
       return s ? JSON.parse(s) : [];
-    } catch {
-      return [];
     }
-  }
-  function getSessionYoutubeLink() {
-    try {
-      return sessionStorage.getItem('youtubeLink') || '';
-    } catch {
-      return '';
-    }
-  }
-  const [youtubeLink, setYoutubeLink] = useState<string>(getSessionYoutubeLink());
-  const [songs, setSongs] = useState<Song[]>(getSessionSongs());
+    return [];
+  });
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Persist youtubeLink and songs to sessionStorage
+  useEffect(() => {
+    if (!mounted) return;
+    sessionStorage.setItem('youtubeLink', youtubeLink);
+  }, [youtubeLink, mounted]);
+  useEffect(() => {
+    if (!mounted) return;
+    sessionStorage.setItem('parsedSongs', JSON.stringify(songs));
+  }, [songs, mounted]);
+
+  // --- State Hooks ---
   const [loading, setLoading] = useState(false);
   const [useAiPlaylistName, setUseAiPlaylistName] = useState(false);
   const [playlistName, setPlaylistName] = useState<string>("");
@@ -99,16 +112,13 @@ export default function Home() {
   const [currentSpotifySearchSong, setCurrentSpotifySearchSong] = useState<Song | null>(null);
   const [spotifyPlaylistUrl, setSpotifyPlaylistUrl] = useState<string | null>(null);
   const [spotifyAllSongsFound, setSpotifyAllSongsFound] = useState<boolean | null>(null);
-
-  // --- Add state for comment pagination and prompt ---
   const [commentsPage, setCommentsPage] = useState(1);
   const [showMoreCommentsPrompt, setShowMoreCommentsPrompt] = useState(false);
   const [canFetchMoreComments, setCanFetchMoreComments] = useState(false);
-
-  // --- Confirmation Dialog State ---
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const [confirmationTitle, setConfirmationTitle] = useState('');
   const [confirmationDescription, setConfirmationDescription] = useState('');
+  const [inputMode, setInputMode] = useState<'url' | 'id'>('url');
 
   // --- Effects ---
 
@@ -155,16 +165,6 @@ export default function Home() {
 
     return () => clearInterval(interval);
   }, []);
-
-  const [inputMode, setInputMode] = useState<'url' | 'id'>('url');
-
-  // Persist youtubeLink and songs to sessionStorage
-  useEffect(() => {
-    sessionStorage.setItem('youtubeLink', youtubeLink);
-  }, [youtubeLink]);
-  useEffect(() => {
-    sessionStorage.setItem('parsedSongs', JSON.stringify(songs));
-  }, [songs]);
 
   // Helper to extract YouTube video ID
   function getYoutubeVideoId(url: string): string | null {
@@ -536,247 +536,251 @@ export default function Home() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-start min-h-screen p-4 bg-background text-foreground">
-      <Card className="mb-4 relative">
-        <CardHeader className="flex flex-row items-start justify-between">
-          <CardTitle>Service Connections</CardTitle>
-          {songs.length > 0 && (
-            <Button
-              className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded flex items-center disabled:opacity-50"
-              onClick={handleClearParsed}
+    <>
+      {!mounted ? null : (
+        <div className="flex flex-col items-center justify-start min-h-screen p-4 bg-background text-foreground">
+          <Card className="mb-4 relative">
+            <CardHeader className="flex flex-row items-start justify-between">
+              <CardTitle>Service Connections</CardTitle>
+              {songs.length > 0 && (
+                <Button
+                  className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded flex items-center disabled:opacity-50"
+                  onClick={handleClearParsed}
+                >
+                  Clear Parsed Songs
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              <div className="flex space-x-4 items-center">
+                {/* YouTube Connection Status */}
+                <div className="flex items-center space-x-2">
+                  {youtubeIcon}
+                  <YoutubeStatusBanner youtubeConnected={youtubeConnected} loading={loading} />
+                </div>
+                {/* Spotify Connection Status */}
+                <div className="flex items-center space-x-2">
+                  {spotifyIcon}
+                  <SpotifyStatusBanner spotifyConnected={spotifyConnected} loading={loading} onConnect={() => window.location.href='/api/spotify/login'} />
+                </div>
+                {/* Apple Music Placeholder */}
+                <div className="flex items-center space-x-2">
+                  {appleMusicIcon}
+                  <span className="font-semibold text-gray-400">Apple Music</span>
+                  <span className="ml-1 text-xs bg-gray-100 text-gray-400 px-2 py-0.5 rounded">Coming Soon</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          {/* YouTube Input Form and Parsed Songs Side-by-Side, Centered and Equal Height */}
+          <div className="w-full flex flex-col items-center">
+            <div className={`flex w-full max-w-5xl justify-center items-stretch gap-8 mt-4 ${songs.length === 0 ? 'min-h-[440px]' : ''}`}
             >
-              Clear Parsed Songs
-            </Button>
-          )}
-        </CardHeader>
-        <CardContent>
-          <div className="flex space-x-4 items-center">
-            {/* YouTube Connection Status */}
-            <div className="flex items-center space-x-2">
-              {youtubeIcon}
-              <YoutubeStatusBanner youtubeConnected={youtubeConnected} loading={loading} />
-            </div>
-            {/* Spotify Connection Status */}
-            <div className="flex items-center space-x-2">
-              {spotifyIcon}
-              <SpotifyStatusBanner spotifyConnected={spotifyConnected} loading={loading} onConnect={() => window.location.href='/api/spotify/login'} />
-            </div>
-            {/* Apple Music Placeholder */}
-            <div className="flex items-center space-x-2">
-              {appleMusicIcon}
-              <span className="font-semibold text-gray-400">Apple Music</span>
-              <span className="ml-1 text-xs bg-gray-100 text-gray-400 px-2 py-0.5 rounded">Coming Soon</span>
+              {/* Grouped Section: If no songs, center YouTubeInputForm. If songs, show both side by side */}
+              {songs.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center">
+                  <Card className="w-full max-w-md h-full min-h-[440px] p-4 rounded-lg shadow-md bg-secondary flex flex-col justify-center">
+                    <CardHeader>
+                      <CardTitle className="text-lg font-semibold flex justify-center items-center text-center w-full">
+                        <span role="img" aria-label="music">🎵</span>
+                        <span className="mx-2">TuneFlow</span>
+                        <span role="img" aria-label="sparkles">✨</span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex-1 flex flex-col justify-center">
+                      <YouTubeInputForm
+                        youtubeLink={youtubeLink}
+                        setYoutubeLink={setYoutubeLink}
+                        inputMode={inputMode}
+                        setInputMode={setInputMode}
+                        scanComments={scanComments}
+                        setScanComments={setScanComments}
+                        scanDescription={scanDescription}
+                        setScanDescription={setScanDescription}
+                        scanChapters={scanChapters}
+                        setScanChapters={setScanChapters}
+                        prioritizePinned={prioritizePinned}
+                        setPrioritizePinned={setPrioritizePinned}
+                        loading={loading}
+                        onParse={handleParseComments}
+                      />
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : (
+                <>
+                  <div className="flex-1 flex flex-col items-center justify-center">
+                    <Card className="w-full max-w-md h-full min-h-[440px] p-4 rounded-lg shadow-md bg-secondary flex flex-col">
+                      <CardHeader>
+                        <CardTitle className="text-lg font-semibold flex justify-center items-center text-center w-full">
+                          <span role="img" aria-label="music">🎵</span>
+                          <span className="mx-2">TuneFlow</span>
+                          <span role="img" aria-label="sparkles">✨</span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="flex-1 flex flex-col justify-center">
+                        <YouTubeInputForm
+                          youtubeLink={youtubeLink}
+                          setYoutubeLink={setYoutubeLink}
+                          inputMode={inputMode}
+                          setInputMode={setInputMode}
+                          scanComments={scanComments}
+                          setScanComments={setScanComments}
+                          scanDescription={scanDescription}
+                          setScanDescription={setScanDescription}
+                          scanChapters={scanChapters}
+                          setScanChapters={setScanChapters}
+                          prioritizePinned={prioritizePinned}
+                          setPrioritizePinned={setPrioritizePinned}
+                          loading={loading}
+                          onParse={handleParseComments}
+                        />
+                      </CardContent>
+                    </Card>
+                  </div>
+                  <div className="flex-1 flex flex-col items-center justify-center">
+                    <ParsedSongsList
+                      songs={songs}
+                      onClear={handleClearParsed}
+                      onFail={(failedSong) => {
+                        setFailedAlbumArtSongs((prev) => {
+                          if (prev.find(s => s.title === failedSong.title && s.artist === failedSong.artist)) return prev;
+                          return [...prev, failedSong];
+                        });
+                      }}
+                      failedAlbumArtSongs={failedAlbumArtSongs}
+                    />
+                  </div>
+                </>
+              )}
+              {showMoreCommentsPrompt && (
+                <div className="flex justify-center mt-4">
+                  <PaginationControls
+                    currentPage={commentsPage}
+                    canFetchMore={canFetchMoreComments}
+                    onFetchMore={handleFetchMoreComments}
+                    loading={loading}
+                  />
+                </div>
+              )}
+              {failedAlbumArtSongs.length > 0 && (
+                <div className="mt-6">
+                  <div className="rounded-lg border bg-card text-card-foreground shadow-sm mb-6" style={{ background: 'var(--card-bg,rgba(238, 157, 146, 0.66))' }}>
+                    <div className="flex items-center justify-between px-6 pt-6">
+                      <h3 className="text-lg font-semibold">Songs Failed to Parse (Album Art or Search)</h3>
+                    </div>
+                    <div className="p-6 pt-0">
+                      <ul className="space-y-2 max-h-60 overflow-y-auto">
+                        {failedAlbumArtSongs.map((song) => (
+                          <li key={`fail-${hashSong(song)}`} className="flex items-center text-sm border-b pb-1">
+                            <div className="w-10 h-10 flex items-center justify-center bg-gray-200 rounded mr-3 border text-xs text-gray-500">N/A</div>
+                            <div>
+                              <div className="font-semibold">{song.title}</div>
+                              <div className="text-xs text-gray-500">{song.artist}</div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        </CardContent>
-      </Card>
-      {/* YouTube Input Form and Parsed Songs Side-by-Side, Centered and Equal Height */}
-      <div className="w-full flex flex-col items-center">
-        <div className={`flex w-full max-w-5xl justify-center items-stretch gap-8 mt-4 ${songs.length === 0 ? 'min-h-[440px]' : ''}`}
-        >
-          {/* Grouped Section: If no songs, center YouTubeInputForm. If songs, show both side by side */}
-          {songs.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center">
-              <Card className="w-full max-w-md h-full min-h-[440px] p-4 rounded-lg shadow-md bg-secondary flex flex-col justify-center">
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold flex justify-center items-center text-center w-full">
-                    <span role="img" aria-label="music">🎵</span>
-                    <span className="mx-2">TuneFlow</span>
-                    <span role="img" aria-label="sparkles">✨</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex-1 flex flex-col justify-center">
-                  <YouTubeInputForm
+          {/* Swipable Playlist Creation Cards (Tabs) Below */}
+          <div className="w-full flex flex-col items-center mt-8">
+            <div className="w-full max-w-md">
+              <Tabs defaultValue="youtube" className="w-full">
+                <TabsList className="w-full flex justify-between mb-4">
+                  <TabsTrigger value="youtube" className="flex-1">YouTube Playlist</TabsTrigger>
+                  <TabsTrigger value="spotify" className="flex-1">Spotify Playlist</TabsTrigger>
+                </TabsList>
+                <TabsContent value="youtube">
+                  <PlaylistCreateForm
+                    songs={songs}
+                    service="youtube"
+                    playlistName={playlistName}
+                    setPlaylistName={setPlaylistName}
+                    useAiPlaylistName={useAiPlaylistName}
+                    setUseAiPlaylistName={setUseAiPlaylistName}
+                    connected={youtubeConnected}
                     youtubeLink={youtubeLink}
-                    setYoutubeLink={setYoutubeLink}
-                    inputMode={inputMode}
-                    setInputMode={setInputMode}
-                    scanComments={scanComments}
-                    setScanComments={setScanComments}
-                    scanDescription={scanDescription}
-                    setScanDescription={setScanDescription}
-                    scanChapters={scanChapters}
-                    setScanChapters={setScanChapters}
-                    prioritizePinned={prioritizePinned}
-                    setPrioritizePinned={setPrioritizePinned}
-                    loading={loading}
-                    onParse={handleParseComments}
+                    onSuccess={(url) => {
+                      toast({
+                        title: 'YouTube Playlist Created!',
+                        description: (
+                          <span>
+                            Playlist created successfully!{' '}
+                            {url && (
+                              <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#ef4444', fontWeight: 'bold', textDecoration: 'underline' }}>
+                                Open Playlist
+                              </a>
+                            )}
+                          </span>
+                        ),
+                        variant: 'default',
+                        duration: 10000,
+                        position: 'top-right',
+                      });
+                    }}
+                    onError={(err) => toast({ title: 'YouTube Playlist Error', description: err, variant: 'destructive', position: 'top-left' })}
                   />
-                </CardContent>
-              </Card>
+                </TabsContent>
+                <TabsContent value="spotify">
+                  <PlaylistCreateForm
+                    songs={songs}
+                    service="spotify"
+                    playlistName={playlistName}
+                    setPlaylistName={setPlaylistName}
+                    useAiPlaylistName={useAiPlaylistName}
+                    setUseAiPlaylistName={setUseAiPlaylistName}
+                    connected={!!spotifyConnected}
+                    onSuccess={(url) => {
+                      setSpotifyPlaylistUrl(url);
+                      setSpotifyAllSongsFound(true); // Assume all found for now
+                      toast({
+                        title: 'Spotify Playlist Created!',
+                        description: (
+                          <span>
+                            Playlist created successfully!{' '}
+                            {url && (
+                              <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#22c55e', fontWeight: 'bold', textDecoration: 'underline' }}>
+                                Open Playlist
+                              </a>
+                            )}
+                          </span>
+                        ),
+                        variant: 'default',
+                        duration: 10000,
+                        position: 'top-right',
+                      });
+                    }}
+                    onError={(err) => toast({ title: 'Spotify Playlist Error', description: err, variant: 'destructive', position: 'top-left' })}
+                  />
+                </TabsContent>
+              </Tabs>
             </div>
-          ) : (
-            <>
-              <div className="flex-1 flex flex-col items-center justify-center">
-                <Card className="w-full max-w-md h-full min-h-[440px] p-4 rounded-lg shadow-md bg-secondary flex flex-col">
-                  <CardHeader>
-                    <CardTitle className="text-lg font-semibold flex justify-center items-center text-center w-full">
-                      <span role="img" aria-label="music">🎵</span>
-                      <span className="mx-2">TuneFlow</span>
-                      <span role="img" aria-label="sparkles">✨</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex-1 flex flex-col justify-center">
-                    <YouTubeInputForm
-                      youtubeLink={youtubeLink}
-                      setYoutubeLink={setYoutubeLink}
-                      inputMode={inputMode}
-                      setInputMode={setInputMode}
-                      scanComments={scanComments}
-                      setScanComments={setScanComments}
-                      scanDescription={scanDescription}
-                      setScanDescription={setScanDescription}
-                      scanChapters={scanChapters}
-                      setScanChapters={setScanChapters}
-                      prioritizePinned={prioritizePinned}
-                      setPrioritizePinned={setPrioritizePinned}
-                      loading={loading}
-                      onParse={handleParseComments}
-                    />
-                  </CardContent>
-                </Card>
-              </div>
-              <div className="flex-1 flex flex-col items-center justify-center">
-                <ParsedSongsList
-                  songs={songs}
-                  onClear={handleClearParsed}
-                  onFail={(failedSong) => {
-                    setFailedAlbumArtSongs((prev) => {
-                      if (prev.find(s => s.title === failedSong.title && s.artist === failedSong.artist)) return prev;
-                      return [...prev, failedSong];
-                    });
-                  }}
-                  failedAlbumArtSongs={failedAlbumArtSongs}
-                />
-              </div>
-            </>
-          )}
-          {showMoreCommentsPrompt && (
-            <div className="flex justify-center mt-4">
-              <PaginationControls
-                currentPage={commentsPage}
-                canFetchMore={canFetchMoreComments}
-                onFetchMore={handleFetchMoreComments}
-                loading={loading}
-              />
-            </div>
-          )}
-          {failedAlbumArtSongs.length > 0 && (
-            <div className="mt-6">
-              <div className="rounded-lg border bg-card text-card-foreground shadow-sm mb-6" style={{ background: 'var(--card-bg,rgba(238, 157, 146, 0.66))' }}>
-                <div className="flex items-center justify-between px-6 pt-6">
-                  <h3 className="text-lg font-semibold">Songs Failed to Parse (Album Art or Search)</h3>
-                </div>
-                <div className="p-6 pt-0">
-                  <ul className="space-y-2 max-h-60 overflow-y-auto">
-                    {failedAlbumArtSongs.map((song) => (
-                      <li key={`fail-${hashSong(song)}`} className="flex items-center text-sm border-b pb-1">
-                        <div className="w-10 h-10 flex items-center justify-center bg-gray-200 rounded mr-3 border text-xs text-gray-500">N/A</div>
-                        <div>
-                          <div className="font-semibold">{song.title}</div>
-                          <div className="text-xs text-gray-500">{song.artist}</div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </div>
-          )}
+          </div>
+          {/* Footer */}
+          <footer className="w-full max-w-md mx-auto mt-12 mb-4 text-center text-xs text-foreground">
+            <hr className="mb-3" />
+            <nav>
+              <a href="/privacy-policy" className="underline hover:text-primary mr-4 text-foreground">Privacy Policy</a>
+              <a href="/terms-of-use" className="underline hover:text-primary mr-4 text-foreground">Terms of Use</a>
+              <a href="/gdpr-policy" className="underline hover:text-primary mr-4 text-foreground">GDPR Policy</a>
+              <a href="/data-opt-out" className="underline hover:text-primary text-foreground">Data Opt-Out</a>
+            </nav>
+            <div className="mt-2 text-foreground">&copy; 2025 TuneFlow</div>
+          </footer>
+          <ConfirmationDialog
+            open={confirmationOpen}
+            title={confirmationTitle}
+            description={confirmationDescription}
+            onConfirm={handleConfirmClearParsed}
+            onCancel={() => setConfirmationOpen(false)}
+          />
         </div>
-      </div>
-      {/* Swipable Playlist Creation Cards (Tabs) Below */}
-      <div className="w-full flex flex-col items-center mt-8">
-        <div className="w-full max-w-md">
-          <Tabs defaultValue="youtube" className="w-full">
-            <TabsList className="w-full flex justify-between mb-4">
-              <TabsTrigger value="youtube" className="flex-1">YouTube Playlist</TabsTrigger>
-              <TabsTrigger value="spotify" className="flex-1">Spotify Playlist</TabsTrigger>
-            </TabsList>
-            <TabsContent value="youtube">
-              <PlaylistCreateForm
-                songs={songs}
-                service="youtube"
-                playlistName={playlistName}
-                setPlaylistName={setPlaylistName}
-                useAiPlaylistName={useAiPlaylistName}
-                setUseAiPlaylistName={setUseAiPlaylistName}
-                connected={youtubeConnected}
-                youtubeLink={youtubeLink}
-                onSuccess={(url) => {
-                  toast({
-                    title: 'YouTube Playlist Created!',
-                    description: (
-                      <span>
-                        Playlist created successfully!{' '}
-                        {url && (
-                          <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#ef4444', fontWeight: 'bold', textDecoration: 'underline' }}>
-                            Open Playlist
-                          </a>
-                        )}
-                      </span>
-                    ),
-                    variant: 'default',
-                    duration: 10000,
-                    position: 'top-right',
-                  });
-                }}
-                onError={(err) => toast({ title: 'YouTube Playlist Error', description: err, variant: 'destructive', position: 'top-left' })}
-              />
-            </TabsContent>
-            <TabsContent value="spotify">
-              <PlaylistCreateForm
-                songs={songs}
-                service="spotify"
-                playlistName={playlistName}
-                setPlaylistName={setPlaylistName}
-                useAiPlaylistName={useAiPlaylistName}
-                setUseAiPlaylistName={setUseAiPlaylistName}
-                connected={!!spotifyConnected}
-                onSuccess={(url) => {
-                  setSpotifyPlaylistUrl(url);
-                  setSpotifyAllSongsFound(true); // Assume all found for now
-                  toast({
-                    title: 'Spotify Playlist Created!',
-                    description: (
-                      <span>
-                        Playlist created successfully!{' '}
-                        {url && (
-                          <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#22c55e', fontWeight: 'bold', textDecoration: 'underline' }}>
-                            Open Playlist
-                          </a>
-                        )}
-                      </span>
-                    ),
-                    variant: 'default',
-                    duration: 10000,
-                    position: 'top-right',
-                  });
-                }}
-                onError={(err) => toast({ title: 'Spotify Playlist Error', description: err, variant: 'destructive', position: 'top-left' })}
-              />
-            </TabsContent>
-          </Tabs>
-        </div>
-      </div>
-      {/* Footer */}
-      <footer className="w-full max-w-md mx-auto mt-12 mb-4 text-center text-xs text-foreground">
-        <hr className="mb-3" />
-        <nav>
-          <a href="/privacy-policy" className="underline hover:text-primary mr-4 text-foreground">Privacy Policy</a>
-          <a href="/terms-of-use" className="underline hover:text-primary mr-4 text-foreground">Terms of Use</a>
-          <a href="/gdpr-policy" className="underline hover:text-primary mr-4 text-foreground">GDPR Policy</a>
-          <a href="/data-opt-out" className="underline hover:text-primary text-foreground">Data Opt-Out</a>
-        </nav>
-        <div className="mt-2 text-foreground">&copy; 2025 TuneFlow</div>
-      </footer>
-      <ConfirmationDialog
-        open={confirmationOpen}
-        title={confirmationTitle}
-        description={confirmationDescription}
-        onConfirm={handleConfirmClearParsed}
-        onCancel={() => setConfirmationOpen(false)}
-      />
-    </div>
+      )}
+    </>
   );
 }
