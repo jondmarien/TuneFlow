@@ -36,6 +36,7 @@ import { PlaylistCreateForm } from "@/components/PlaylistCreateForm";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { YoutubeStatusBanner } from "@/components/YoutubeStatusBanner";
 import { ParsedSongsList } from "@/components/ParsedSongsList";
+import { FailedSongsList } from "@/components/FailedSongsList";
 
 // Define Song type locally or in a shared types file if needed elsewhere
 type Song = {
@@ -78,12 +79,19 @@ export default function Home() {
     }
     return [];
   });
+  const [failedAlbumArtSongs, setFailedAlbumArtSongs] = useState<Song[]>(() => {
+    if (typeof window !== 'undefined') {
+      const f = sessionStorage.getItem('failedSongs');
+      return f ? JSON.parse(f) : [];
+    }
+    return [];
+  });
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Persist youtubeLink and songs to sessionStorage
+  // Persist youtubeLink, songs, and failedAlbumArtSongs to sessionStorage
   useEffect(() => {
     if (!mounted) return;
     sessionStorage.setItem('youtubeLink', youtubeLink);
@@ -92,6 +100,10 @@ export default function Home() {
     if (!mounted) return;
     sessionStorage.setItem('parsedSongs', JSON.stringify(songs));
   }, [songs, mounted]);
+  useEffect(() => {
+    if (!mounted) return;
+    sessionStorage.setItem('failedSongs', JSON.stringify(failedAlbumArtSongs));
+  }, [failedAlbumArtSongs, mounted]);
 
   // --- State Hooks ---
   const [loading, setLoading] = useState(false);
@@ -106,7 +118,6 @@ export default function Home() {
   const [spotifyReady, setSpotifyReady] = useState(true); // Assume ready for basic search initially
   const [parsingState, setParsingState] = useState<string | null>(null); // More specific state tracking
   const [canCreatePlaylist, setCanCreatePlaylist] = useState(false);
-  const [failedAlbumArtSongs, setFailedAlbumArtSongs] = useState<Song[]>([]);
   const [spotifySearchStatus, setSpotifySearchStatus] = useState<'idle' | 'searching' | 'done'>('idle');
   const [spotifySongSearches, setSpotifySongSearches] = useState<{ song: Song; status: 'pending' | 'searching' | 'found' | 'not_found' }[]>([]);
   const [currentSpotifySearchSong, setCurrentSpotifySearchSong] = useState<Song | null>(null);
@@ -457,26 +468,25 @@ export default function Home() {
       }
     }
 
-    setSongs(allSongs);
-    setCanCreatePlaylist(allSongs.length > 0);
-    setParsingState(null);
+    // Move songs with unknown/various artists to failed list
+    const failedSongs = allSongs.filter(song => {
+      const artist = song.artist?.toLowerCase() || '';
+      return (
+        artist.includes('unknown') ||
+        artist.includes('various') ||
+        artist.trim() === ''
+      );
+    });
+    const foundSongs = allSongs.filter(song => !failedSongs.includes(song));
+    setSongs(foundSongs);
+    setFailedAlbumArtSongs(failedSongs);
+    setCanCreatePlaylist(foundSongs.length > 0);
     setLoading(false);
-
-    // Persist after parse
-    sessionStorage.setItem('youtubeLink', youtubeLink);
-    sessionStorage.setItem('parsedSongs', JSON.stringify(allSongs));
-
-    if (errors.length) {
+    setParsingState(null);
+    if (errors.length > 0) {
       toast({
-        title: allSongs.length > 0 ? 'Some Extractions Failed' : 'Extraction Failed',
-        description: errors.join(' | '),
-        variant: allSongs.length > 0 ? 'default' : 'destructive',
-        position: 'top-left',
-      });
-    } else if (allSongs.length === 0) {
-      toast({
-        title: 'No Songs Found',
-        description: 'No songs could be extracted from the selected sources.',
+        title: 'Some Extraction Steps Failed',
+        description: errors.join('\n'),
         variant: 'destructive',
         position: 'top-left',
       });
@@ -574,10 +584,10 @@ export default function Home() {
           </Card>
           {/* YouTube Input Form and Parsed Songs Side-by-Side, Centered and Equal Height */}
           <div className="w-full flex flex-col items-center">
-            <div className={`flex w-full max-w-5xl justify-center items-stretch gap-8 mt-4 ${songs.length === 0 ? 'min-h-[440px]' : ''}`}
+            <div className={`flex w-full max-w-5xl justify-center items-stretch gap-8 mt-4 ${songs.length === 0 && failedAlbumArtSongs.length === 0 ? 'min-h-[440px]' : ''}`}
             >
-              {/* Grouped Section: If no songs, center YouTubeInputForm. If songs, show both side by side */}
-              {songs.length === 0 ? (
+              {/* Grouped Section: If no songs, center YouTubeInputForm. If songs, show all three in a row */}
+              {songs.length === 0 && failedAlbumArtSongs.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center">
                   <Card className="w-full max-w-md h-full min-h-[440px] p-4 rounded-lg shadow-md bg-secondary flex flex-col justify-center">
                     <CardHeader>
@@ -608,7 +618,7 @@ export default function Home() {
                   </Card>
                 </div>
               ) : (
-                <>
+                <div className="flex w-full max-w-6xl justify-center items-stretch gap-8 mt-4">
                   <div className="flex-1 flex flex-col items-center justify-center">
                     <Card className="w-full max-w-md h-full min-h-[440px] p-4 rounded-lg shadow-md bg-secondary flex flex-col">
                       <CardHeader>
@@ -651,7 +661,10 @@ export default function Home() {
                       failedAlbumArtSongs={failedAlbumArtSongs}
                     />
                   </div>
-                </>
+                  <div className="flex-1 flex flex-col items-center justify-center">
+                    <FailedSongsList failedSongs={failedAlbumArtSongs} />
+                  </div>
+                </div>
               )}
               {showMoreCommentsPrompt && (
                 <div className="flex justify-center mt-4">
@@ -661,28 +674,6 @@ export default function Home() {
                     onFetchMore={handleFetchMoreComments}
                     loading={loading}
                   />
-                </div>
-              )}
-              {failedAlbumArtSongs.length > 0 && (
-                <div className="mt-6">
-                  <div className="rounded-lg border bg-card text-card-foreground shadow-sm mb-6" style={{ background: 'var(--card-bg,rgba(238, 157, 146, 0.66))' }}>
-                    <div className="flex items-center justify-between px-6 pt-6">
-                      <h3 className="text-lg font-semibold">Songs Failed to Parse (Album Art or Search)</h3>
-                    </div>
-                    <div className="p-6 pt-0">
-                      <ul className="space-y-2 max-h-60 overflow-y-auto">
-                        {failedAlbumArtSongs.map((song) => (
-                          <li key={`fail-${hashSong(song)}`} className="flex items-center text-sm border-b pb-1">
-                            <div className="w-10 h-10 flex items-center justify-center bg-gray-200 rounded mr-3 border text-xs text-gray-500">N/A</div>
-                            <div>
-                              <div className="font-semibold">{song.title}</div>
-                              <div className="text-xs text-gray-500">{song.artist}</div>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
                 </div>
               )}
             </div>

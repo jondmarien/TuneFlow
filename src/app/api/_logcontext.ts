@@ -8,15 +8,9 @@ interface RequestContext {
   ip?: string;
 }
 
-// Set your own IP address here
-const MY_IPS = [
-  '::1', // localhost IPv6
-  '127.0.0.1', // localhost IPv4
-  '::ffff:127.0.0.1', // localhost IPv4-mapped IPv6
-  // Add your public IP address string(s) here
-  // Example: '123.123.123.123'
-  '70.50.138.15'
-];
+// Use environment variable for IPs
+const myIpsEnv = process.env.MY_COMPUTER_IPS;
+const MY_IPS = myIpsEnv ? myIpsEnv.split(',').map(ip => ip.trim()) : [];
 
 // Create an AsyncLocalStorage instance
 export const requestContextStorage = new AsyncLocalStorage<RequestContext>();
