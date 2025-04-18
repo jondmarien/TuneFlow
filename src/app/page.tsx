@@ -910,8 +910,19 @@ export default function Home() {
   const clearFailedSongs = () => {
     setFailedAlbumArtSongs([]); // frontend state
     sessionStorage.removeItem('failedSongs'); // for persisting failed songs in sessionStorage
-    // Optionally, POST to backend to clear failed songs server-side
-    fetch('/api/clear-failed-songs', { method: 'POST' });
+    // Clear failed songs in Redis using standardized cache key
+    const videoId = getYoutubeVideoId(youtubeLink);
+    if (videoId) {
+      const cacheKey = `failed_songs:${videoId}`;
+      fetch('/api/clear-failed-songs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cacheKey })
+      });
+    } else {
+      // fallback: clear generic key if videoId is not available
+      fetch('/api/clear-failed-songs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cacheKey: 'failed_songs' }) });
+    }
   }
 
   const handleClearParsed = () => {
@@ -1139,13 +1150,13 @@ export default function Home() {
           </div>
 
           {/* Spotify Playlist Creation Section - Enabled after successful parsing */}
-          {canCreatePlaylist && (
+          {canCreatePlaylist && (spotifyConnected || youtubeConnected) && (
             <div className="space-y-2 pt-4 border-t">
               <div className="flex items-center gap-2 pb-2">
                 <Checkbox
                   id="ai-playlist-name"
                   checked={useAiPlaylistName}
-                  onCheckedChange={(checked) => {}}
+                  onCheckedChange={() => {}}
                   disabled
                 />
                 <Label htmlFor="ai-playlist-name" className="text-sm text-muted-foreground">
