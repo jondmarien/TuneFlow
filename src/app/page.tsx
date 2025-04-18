@@ -20,6 +20,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { signIn, signOut, useSession } from "next-auth/react";
 import type { Session } from "next-auth";
+import { hasAccessToken } from "@/utils/typeGuards";
+import { useAlbumArtWithFailure } from "@/hooks/useAlbumArtWithFailure";
+import { SongItem } from "@/components/SongItem";
+import { SongList } from "@/components/SongList";
+import { YouTubeInputForm } from "@/components/YouTubeInputForm";
+import { PlaylistNameForm } from "@/components/PlaylistNameForm";
+import { SpotifyStatusBanner } from "@/components/SpotifyStatusBanner";
+import { ErrorBanner } from "@/components/ErrorBanner";
+import { PaginationControls } from "@/components/PaginationControls";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { ConfirmationDialog } from "@/components/ConfirmationDialog";
+import { fetchFallbackAlbumArt, AlbumArtDialog as AlbumArtDialogComponent } from "@/components/AlbumArtDialog";
 
 // Define Song type locally or in a shared types file if needed elsewhere
 type Song = {
@@ -29,110 +41,10 @@ type Song = {
   videoId?: string;  // Optional YouTube video ID
 };
 
-// Helper type guard for accessToken
-function hasAccessToken(session: Session | null | undefined): session is Session & { accessToken: string } {
-  return !!session && typeof (session as any).accessToken === 'string';
-}
-
 // YouTube SVG icon (red and white official logo)
-const youtubeIcon = (
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 mr-2">
-    <rect width="24" height="24" rx="4" fill="#FF0000"/>
-    <path d="M9.5 16.913V7.093l6.857 4.91-6.857 4.91z" fill="#fff"/>
-  </svg>
-);
-
-// Spotify SVG icon (high-res official logo)
-const spotifyIcon = (
-  <svg viewBox="0 0 168 168" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 mr-2">
-    <circle cx="84" cy="84" r="84" fill="#1DB954" />
-    <path d="M120.8 115.6c-2.1 0-3.5-.7-5.1-1.7-14-8.6-31.7-10.5-52.7-6.2-2.2.4-4.2-1-4.6-3.2-.4-2.2 1-4.2 3.2-4.6 22.8-4.7 42.1-2.6 57.3 6.4 1.9 1.1 2.5 3.6 1.4 5.5-.7 1.2-2 1.8-3.5 1.8zm7.6-16.3c-2.3 0-3.7-.9-5.2-1.8-16.5-10.1-44.1-13-64.8-7.6-2.4.6-4.8-.8-5.4-3.2-.6-2.4.8-4.8 3.2-5.4 23.2-5.9 52.2-2.8 70.7 8.5 2.1 1.3 2.8 4 1.5 6.1-.8 1.3-2.2 2-3.6 2zm8.6-17.6c-2.4 0-3.9-.8-5.6-1.8-18.1-10.7-48.4-11.7-66-.7-2.6 1.1-5.5-.1-6.6-2.7-1.1-2.6.1-5.5 2.7-6.6 20.1-8.6 53.2-7.5 73.6.9 2.7 1.1 4 4.2 2.9 6.9-.8 2.1-2.6 3.4-4.6 3.4z" fill="#fff"/>
-  </svg>
-);
-
-// Apple Music SVG icon (SVG Apple logo, not unicode)
-const appleMusicIcon = (
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 mr-2">
-    <circle cx="12" cy="12" r="12" fill="#fff" stroke="#ccc" strokeWidth="1" />
-    <path d="M16.365 8.505c-.353.414-.93.736-1.47.692-.07-.66.2-1.36.54-1.8.37-.47 1.02-.8 1.56-.83.08.7-.2 1.41-.63 1.94zm-1.19.97c.02 1.12.97 1.49.99 1.5-.01.03-.16.56-.52 1.1-.32.47-.65.93-1.18.94-.52.01-.69-.3-1.29-.3-.6 0-.79.29-1.28.3-.52.01-.9-.5-1.22-.97-.66-.96-1.16-2.73-.48-3.93.33-.58.92-.95 1.56-.96.49-.01.95.33 1.29.33.33 0 .87-.41 1.47-.35.25.01.96.1 1.41.75-.04.03-.84.49-.83 1.46zm-2.25-3.03c-.08-.6.18-1.23.55-1.63.37-.4.97-.71 1.54-.62.06.63-.18 1.26-.54 1.67-.36.41-.95.73-1.55.58z" fill="#000"/>
-  </svg>
-);
-
-/**
- * Custom React Hook: useAlbumArtWithFailure
- *
- * Polls the /api/album-art endpoint for a song's album art up to 3 times.
- * If album art is not found after 3 attempts, triggers onFail callback.
- *
- * @param song - The song object (title, artist, etc.)
- * @param onFail - Callback to call if album art fails after 3 tries
- * @returns imageUrl - The album art URL (if found)
- */
-function useAlbumArtWithFailure(song: Song, onFail: (song: Song) => void) {
-  const [imageUrl, setImageUrl] = useState(song.imageUrl ?? null);
-  const [failCount, setFailCount] = useState(0);
-
-  useEffect(() => {
-    if (imageUrl || failCount >= 3) return;
-    let cancelled = false;
-
-    async function poll() {
-      const res = await fetch(`/api/album-art?title=${encodeURIComponent(song.title)}&artist=${encodeURIComponent(song.artist)}`);
-      const data = await res.json();
-
-      if (cancelled) return;
-
-      if (data.imageUrl) {
-        setImageUrl(data.imageUrl);
-      } else {
-        if (failCount < 2) {
-          setTimeout(poll, 2000);
-          setFailCount((c) => c + 1);
-        } else {
-          setFailCount((c) => c + 1);
-          // Mark as failed after 3 tries
-          onFail(song);
-        }
-      }
-    }
-
-    poll();
-    return () => { cancelled = true; };
-  }, [song.title, song.artist, imageUrl, failCount]);
-
-  return imageUrl;
-}
-
-/**
- * SongItem Component
- *
- * Renders a single song in the list, showing album art (if available) or a placeholder.
- * Uses the polling hook to fetch album art and triggers onFail if not found after 3 tries.
- *
- * @param song - The song object
- * @param onFail - Callback for failed album art
- */
-function SongItem({ song, onFail }: { song: Song, onFail: (song: Song) => void }) {
-  const imageUrl = useAlbumArtWithFailure(song, onFail);
-
-  return (
-    <li className="flex items-center text-sm border-b pb-1">
-      {imageUrl ? (
-        <img
-          src={imageUrl}
-          alt={`${song.title} album art`}
-          className="w-10 h-10 object-cover rounded mr-3 border"
-        />
-      ) : (
-        <div className="w-10 h-10 flex items-center justify-center bg-gray-200 rounded mr-3 border text-xs text-gray-500">N/A</div>
-      )}
-      <div>
-        <div className="font-semibold">{song.title}</div>
-        <div className="text-xs text-gray-500">{song.artist}</div>
-      </div>
-    </li>
-  );
-}
+const youtubeIcon = <Icons.youtube />;
+const spotifyIcon = <Icons.spotify />;
+const appleMusicIcon = <Icons.appleMusic />;
 
 // --- Main Component ---
 
@@ -190,6 +102,11 @@ export default function Home() {
   const [commentsPage, setCommentsPage] = useState(1);
   const [showMoreCommentsPrompt, setShowMoreCommentsPrompt] = useState(false);
   const [canFetchMoreComments, setCanFetchMoreComments] = useState(false);
+
+  // --- Confirmation Dialog State ---
+  const [confirmationOpen, setConfirmationOpen] = useState(false);
+  const [confirmationTitle, setConfirmationTitle] = useState('');
+  const [confirmationDescription, setConfirmationDescription] = useState('');
 
   // --- Effects ---
 
@@ -372,50 +289,6 @@ export default function Home() {
       });
       return null;
     }
-  }
-
-  // --- Album Art Fallback Helper ---
-  // Try iTunes API as a fallback for failed album art
-  async function fetchFallbackAlbumArt(song: Song): Promise<string | null> {
-    // 1. Try iTunes
-    try {
-      const query = encodeURIComponent(`${song.title} ${song.artist}`);
-      const res = await fetch(`https://itunes.apple.com/search?term=${query}&entity=song&limit=1`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.results && data.results[0] && data.results[0].artworkUrl100) {
-          // iTunes returns 100x100, can upgrade to 600x600
-          return data.results[0].artworkUrl100.replace('100x100', '600x600');
-        }
-      }
-    } catch {}
-    // 2. Try MusicBrainz + Cover Art Archive
-    try {
-      // Step 1: Find release via MusicBrainz search
-      const mbSearchUrl = `https://musicbrainz.org/ws/2/release/?query=release:${encodeURIComponent(song.title)}%20AND%20artist:${encodeURIComponent(song.artist)}&fmt=json&limit=1`;
-      const mbRes = await fetch(mbSearchUrl, { headers: { 'Accept': 'application/json' } });
-      if (mbRes.ok) {
-        const mbData = await mbRes.json();
-        if (mbData.releases && mbData.releases[0] && mbData.releases[0].id) {
-          const mbid = mbData.releases[0].id;
-          // Step 2: Get cover art from Cover Art Archive
-          const caaUrl = `https://coverartarchive.org/release/${mbid}`;
-          const caaRes = await fetch(caaUrl);
-          if (caaRes.ok) {
-            const caaData = await caaRes.json();
-            if (caaData.images && caaData.images.length > 0) {
-              // Prefer front image thumbnail, fallback to first image
-              const front = caaData.images.find((img: any) => img.front) || caaData.images[0];
-              if (front.thumbnails && front.thumbnails["500"]) return front.thumbnails["500"];
-              if (front.thumbnails && front.thumbnails["250"]) return front.thumbnails["250"];
-              if (front.image) return front.image;
-            }
-          }
-        }
-      }
-    } catch {}
-    // If all fail
-    return null;
   }
 
   // --- Improved Spotify Track Search ---
@@ -677,7 +550,7 @@ export default function Home() {
             return [...prev, songs[i]];
           });
           // Try fallback album art for failed songs (iTunes, then MusicBrainz)
-          fetchFallbackAlbumArt(songs[i]).then((art) => {
+          fetchFallbackAlbumArt(songs[i]).then((art: string | null) => {
             if (art) {
               setFailedAlbumArtSongs(prev => prev.map(s => s.title === songs[i].title && s.artist === songs[i].artist ? { ...s, imageUrl: art } : s));
             }
@@ -926,6 +799,12 @@ export default function Home() {
   }
 
   const handleClearParsed = () => {
+    setConfirmationTitle('Clear Parsed Songs?');
+    setConfirmationDescription('Are you sure you want to clear all parsed songs? This action cannot be undone.');
+    setConfirmationOpen(true);
+  };
+
+  const handleConfirmClearParsed = () => {
     setSongs([]);
     setCanCreatePlaylist(false);
     setParsingState(null);
@@ -934,6 +813,7 @@ export default function Home() {
     sessionStorage.removeItem('parsedSongs');
     sessionStorage.removeItem('youtubeLink');
     // Optionally, clear other session storage related to failed/parsed songs
+    setConfirmationOpen(false);
   }
 
   // --- Helper: Always get correct videoId for title fetch ---
@@ -993,7 +873,7 @@ export default function Home() {
                 <Button variant="outline" size="sm" className="ml-2 border-red-500 text-red-600 hover:bg-red-50" onClick={() => signIn('google')}>Connect</Button>
               )}
             </div>
-            {/* Spotify Connection Status + Connect Button */}
+            {/* Spotify Connection Status */}
             <div className="flex items-center space-x-2">
               {spotifyIcon}
               <span className="font-semibold" style={{ color: '#1DB954' }}>Spotify</span>
@@ -1002,14 +882,7 @@ export default function Home() {
                   CONNECTED!
                 </span>
               ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="ml-2 border-[#1DB954] text-[#1DB954] hover:bg-[#1DB954]/10 focus:ring-[#1DB954]"
-                  onClick={() => window.location.href='/api/spotify/login'}
-                >
-                  Connect
-                </Button>
+                <SpotifyStatusBanner spotifyConnected={spotifyConnected} loading={loading} onConnect={() => window.location.href='/api/spotify/login'} />
               )}
             </div>
             {/* Apple Music Placeholder */}
@@ -1021,7 +894,7 @@ export default function Home() {
           </div>
         </CardContent>
       </Card>
-      <Card className="w-full max-w-md p-4 rounded-lg shadow-md bg-secondary">
+      <Card className="w-full max-w-md p-4 rounded-lg shadow-md bg-secondary mt-4">
         <CardHeader>
           <CardTitle className="text-lg font-semibold flex justify-center items-center text-center w-full">
             <span role="img" aria-label="music">🎵</span>
@@ -1030,226 +903,60 @@ export default function Home() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {/* Input Mode Toggle */}
-          <div className="flex items-center gap-2 mb-2 justify-center">
-            <Label htmlFor="inputModeUrl">
-              <input
-                id="inputModeUrl"
-                type="radio"
-                checked={inputMode === 'url'}
-                onChange={() => setInputMode('url')}
-                className="mr-1"
-              />
-              YouTube URL
-            </Label>
-            <Label htmlFor="inputModeId">
-              <input
-                id="inputModeId"
-                type="radio"
-                checked={inputMode === 'id'}
-                onChange={() => setInputMode('id')}
-                className="mr-1"
-              />
-              Video ID Only
-            </Label>
-          </div>
-          {/* YouTube Input Section */}
-          <div className="space-y-2">
-            <div className="flex items-center space-x-2 justify-center">
-              <Label htmlFor="youtube-link" className="text-sm text-muted-foreground text-center w-full flex items-center justify-center">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="mr-2">
-                  <rect width="24" height="24" rx="4" fill="#FF0000"></rect>
-                  <path d="M9.5 16.913V7.093l6.857 4.91-6.857 4.91z" fill="#fff"></path>
-                </svg>
-                Youtube Video Link
-              </Label>
-            </div>
-            <Input
-              id="youtube-link"
-              type="text"
-              placeholder={inputMode === 'url' ? 'Paste YouTube URL here' : 'Enter YouTube Video ID'}
-              value={youtubeLink}
-              onChange={(e) => setYoutubeLink(e.target.value)}
-              className="rounded-md"
-              disabled={loading}
-            />
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="scan-comments"
-                checked={scanComments}
-                onCheckedChange={(checked) => setScanComments(Boolean(checked))}
-                disabled={loading}
-              />
-              <Label htmlFor="scan-comments" className="text-sm text-muted-foreground">
-                Scan YouTube Comments for Songs
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2 pl-7">
-              <Checkbox
-                id="prioritize-pinned"
-                checked={prioritizePinned}
-                onCheckedChange={(checked) => setPrioritizePinned(Boolean(checked))}
-                disabled={!scanComments || loading}
-              />
-              <Label htmlFor="prioritize-pinned" className="text-xs text-muted-foreground">
-                Prioritize Pinned Comments (if available)
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="scan-description"
-                checked={scanDescription}
-                onCheckedChange={(checked) => setScanDescription(Boolean(checked))}
-                disabled={loading}
-              />
-              <Label htmlFor="scan-description" className="text-sm text-muted-foreground">
-                Scan Description for Songs
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="scan-chapters"
-                checked={scanChapters}
-                onCheckedChange={(checked) => setScanChapters(Boolean(checked))}
-                disabled={loading}
-              />
-              <Label htmlFor="scan-chapters" className="text-sm text-muted-foreground">
-                Scan Chapters for Songs
-              </Label>
-            </div>
-            <span
-              title={spotifyConnected !== true ? "Please login to Spotify" : undefined}
-              className="block w-full"
-            >
-              <Button
-                onClick={() => handleParseComments({ fetchMoreComments: false })}
-                disabled={loading || !youtubeLink}
-                className="w-full rounded-md bg-blue-700 hover:bg-blue-400 text-white font-semibold shadow disabled:cursor-not-allowed transition-colors duration-150"
-              >
-                {loading && parsingState === 'Fetching & Parsing Comments / Description' ? (
-                  <span className="flex items-center"><Icons.spinner className="mr-2 h-4 w-4 animate-spin" /> Parsing...</span>
-                ) : (
-                  'Parse YouTube Video Information'
-                )}
-              </Button>
-            </span>
-          </div>
-
-          {/* Move grouped playlist buttons below input section */}
-          <div className="flex flex-col gap-2 my-6">
-            {spotifyConnected && songs.length > 0 && (
-              <Button
-                className="bg-[#1DB954] hover:bg-[#1ed760] text-white font-bold py-2 px-4 rounded flex items-center disabled:opacity-50"
-                onClick={handleCreatePlaylist}
-                disabled={loading}
-              >
-                <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 mr-2">
-                  <path d="M12 0C5.371 0 0 5.371 0 12c0 6.627 5.371 12 12 12s12-5.373 12-12C24 5.371 18.629 0 12 0zm5.379 17.414a.956.956 0 0 1-1.313.318c-3.594-2.203-8.146-2.695-13.521-1.461a.958.958 0 1 1-.428-1.871c5.771-1.319 10.771-.771 14.707 1.631a.956.956 0 0 1 .555 1.383zm1.188-2.635a1.195 1.195 0 0 1-1.638.398c-4.109-2.527-10.381-3.266-15.229-1.77a1.197 1.197 0 1 1-.674-2.302c5.381-1.572 12.184-.752 16.824 2.047a1.195 1.195 0 0 1 .517 1.627zm.125-2.693C15.547 9.76 8.453 9.719 4.063 11.063a1.436 1.436 0 1 1-.812-2.754c5.016-1.482 13.016-1.438 17.688 1.125a1.438 1.438 0 0 1-1.438 2.484z" fill="#fff"/>
-                </svg>
-                Create Playlist on Spotify
-              </Button>
-            )}
-            {youtubeConnected && songs.length > 0 && (
-              <Button
-                className="bg-[#c4302b] hover:bg-[#ff4e45] text-white font-bold py-2 px-4 rounded flex items-center disabled:opacity-50 border border-[#c4302b] transition-colors duration-150"
-                style={{ boxShadow: '0 1px 4px #c4302b33' }}
-                onClick={handleCreateYouTubePlaylist}
-                disabled={loading}
-              >
-                <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 mr-2"><path d="M21.593 7.203a2.41 2.41 0 00-1.687-1.687C18.244 5.008 12 5.008 12 5.008s-6.244 0-7.906.508a2.41 2.41 0 00-1.687 1.687C2.008 8.865 2.008 12 2.008 12s0 3.135.508 4.797a2.41 2.41 0 001.687 1.687c1.662.508 7.906.508 7.906.508s6.244 0 7.906-.508a2.41 2.41 0 001.687-1.687C21.992 15.135 21.992 12 21.992 12s0-3.135-.407-4.797zM9.5 16.913V7.093l6.857 4.91 0 0-6.857 4.91z"></path></svg>
-                <span style={{ color: 'white' }}>Create Playlist on YouTube</span>
-              </Button>
-            )}
-          </div>
-
-          {/* Spotify Playlist Creation Section - Enabled after successful parsing */}
-          {canCreatePlaylist && (spotifyConnected || youtubeConnected) && (
-            <div className="space-y-2 pt-4 border-t">
-              <div className="flex items-center gap-2 pb-2">
-                <Checkbox
-                  id="ai-playlist-name"
-                  checked={useAiPlaylistName}
-                  onCheckedChange={(checked) => {}}
-                  disabled
-                />
-                <Label htmlFor="ai-playlist-name" className="text-sm text-muted-foreground">
-                  Use AI to generate playlist name
-                </Label>
-                <span className="text-xs italic" style={{ color: 'red' }}>(DISABLED UNTIL I CAN FIND A SUITABLE FIX)</span>
-              </div>
-              {/* --- Current Spotify Song Search Status --- */}
-              <div className="flex flex-col items-center justify-center w-full text-center">
-                {spotifySearchStatus === 'searching' && (
-                  <div className="flex flex-col items-center justify-center w-full text-center">
-                    <span className="flex items-center justify-center text-sm text-yellow-600 w-full text-center">
-                      <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                      {currentSpotifySearchSong ? (
-                        <span>Searching for: <span className="font-semibold">{currentSpotifySearchSong.title}</span> by <span className="font-semibold">{currentSpotifySearchSong.artist}</span></span>
-                      ) : (
-                        <span>Searching Spotify for Songs</span>
-                      )}
-                    </span>
-                  </div>
-                )}
-                {spotifySearchStatus === 'done' && spotifyAllSongsFound === true && (
-                  <div className="flex flex-col items-center justify-center w-full text-center">
-                    <span className="text-green-700 font-bold text-center w-full" style={{fontSize:'1.1rem'}}>
-                      SPOTIFY SEARCH COMPLETE: ALL SONGS FOUND ON SPOTIFY.
-                    </span>
-                    {spotifyPlaylistUrl && (
-                      <a href={spotifyPlaylistUrl} target="_blank" rel="noopener noreferrer" className="block mt-2 text-green-700 font-bold underline text-center" style={{fontSize:'1.1rem'}}>
-                        Open Playlist
-                      </a>
-                    )}
-                  </div>
-                )}
-                {spotifySearchStatus === 'done' && spotifyAllSongsFound === false && (
-                  <div className="flex flex-col items-center justify-center w-full text-center">
-                    <span className="text-green-700 font-bold text-center w-full" style={{fontSize:'1.1rem'}}>
-                      SPOTIFY SEARCH COMPLETE: SEE BELOW MESSAGE FOR DETAILS
-                    </span>
-                    <span className="text-red-700 font-bold text-center w-full mt-2" style={{fontSize:'1.1rem'}}>
-                      SOME SONGS FAILED TO PARSE; SEE FAILED SONGS LIST
-                    </span>
-                    {spotifyPlaylistUrl && (
-                      <a href={spotifyPlaylistUrl} target="_blank" rel="noopener noreferrer" className="block mt-2 text-green-700 font-bold underline text-center" style={{fontSize:'1.1rem'}}>
-                        Open Playlist
-                      </a>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          <YouTubeInputForm
+            youtubeLink={youtubeLink}
+            setYoutubeLink={setYoutubeLink}
+            inputMode={inputMode}
+            setInputMode={setInputMode}
+            scanComments={scanComments}
+            setScanComments={setScanComments}
+            scanDescription={scanDescription}
+            setScanDescription={setScanDescription}
+            scanChapters={scanChapters}
+            setScanChapters={setScanChapters}
+            prioritizePinned={prioritizePinned}
+            setPrioritizePinned={setPrioritizePinned}
+            loading={loading}
+            onParse={handleParseComments}
+          />
         </CardContent>
       </Card>
-
-      {/* Display Parsed Songs */}
-      {songs.length > 0 && (
-        <Card className="w-full max-w-md mt-4 p-4 rounded-lg shadow-md bg-secondary">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold">Parsed Songs ({songs.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2 max-h-60 overflow-y-auto">
-              {songs.map((song) => (
-                <SongItem key={hashSong(song)} song={song} onFail={(failedSong) => {
-                  setFailedAlbumArtSongs((prev) => {
-                    // Only add if not already present
-                    if (prev.find(s => s.title === failedSong.title && s.artist === failedSong.artist)) return prev;
-                    return [...prev, failedSong];
-                  });
-                }} />
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
+      {/* Break between YouTubeInputForm and Parsed Songs */}
+      <div className="my-6 w-full flex justify-center">
+        <hr className="w-full max-w-md border-t-2 border-gray-200" />
+      </div>
+      <Card className="w-full max-w-md p-4 rounded-lg shadow-md bg-secondary">
+        <CardHeader className="flex flex-row items-start justify-between">
+          <CardTitle className="text-lg font-semibold">Parsed Songs ({songs.length})</CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleClearParsed}
+            disabled={songs.length === 0}
+          >
+            Clear
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <SongList
+            songs={songs}
+            onFail={(failedSong) => {
+              setFailedAlbumArtSongs((prev) => {
+                if (prev.find(s => s.title === failedSong.title && s.artist === failedSong.artist)) return prev;
+                return [...prev, failedSong];
+              });
+            }}
+          />
+        </CardContent>
+      </Card>
       {showMoreCommentsPrompt && (
         <div className="flex justify-center mt-4">
-          <Button onClick={handleFetchMoreComments} disabled={loading} variant="outline">
-            Check more pages for tracklist?
-          </Button>
+          <PaginationControls
+            currentPage={commentsPage}
+            canFetchMore={canFetchMoreComments}
+            onFetchMore={handleFetchMoreComments}
+            loading={loading}
+          />
         </div>
       )}
       {failedAlbumArtSongs.length > 0 && (
@@ -1285,6 +992,13 @@ export default function Home() {
         </nav>
         <div className="mt-2 text-foreground">&copy; 2025 TuneFlow</div>
       </footer>
+      <ConfirmationDialog
+        open={confirmationOpen}
+        title={confirmationTitle}
+        description={confirmationDescription}
+        onConfirm={handleConfirmClearParsed}
+        onCancel={() => setConfirmationOpen(false)}
+      />
     </div>
   );
 }
