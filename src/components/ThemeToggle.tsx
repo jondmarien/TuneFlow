@@ -10,20 +10,29 @@ function getSystemTheme() {
 }
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    if (typeof window === 'undefined') return 'light';
-    return (localStorage.getItem(THEME_KEY) as 'light' | 'dark') || getSystemTheme();
-  });
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+    // Only read from localStorage on the client
+    const stored = (typeof window !== 'undefined') ? (localStorage.getItem(THEME_KEY) as 'light' | 'dark' | null) : null;
+    setTheme(stored || getSystemTheme());
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
     document.documentElement.classList.remove('light', 'dark');
     document.documentElement.classList.add(theme);
     localStorage.setItem(THEME_KEY, theme);
-  }, [theme]);
+  }, [theme, mounted]);
 
   function toggleTheme() {
     setTheme(t => (t === 'light' ? 'dark' : 'light'));
   }
+
+  // Prevent hydration mismatch: render nothing until mounted
+  if (!mounted) return null;
 
   return (
     <button

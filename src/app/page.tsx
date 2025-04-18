@@ -35,6 +35,7 @@ import { fetchFallbackAlbumArt, AlbumArtDialog as AlbumArtDialogComponent } from
 import { PlaylistCreateForm } from "@/components/PlaylistCreateForm";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { YoutubeStatusBanner } from "@/components/YoutubeStatusBanner";
+import { ParsedSongsList } from "@/components/ParsedSongsList";
 
 // Define Song type locally or in a shared types file if needed elsewhere
 type Song = {
@@ -571,96 +572,117 @@ export default function Home() {
       </Card>
       {/* YouTube Input Form and Parsed Songs Side-by-Side, Centered and Equal Height */}
       <div className="w-full flex flex-col items-center">
-        <div className="flex flex-row w-full max-w-5xl justify-center items-stretch gap-8 mt-4">
-          {/* YouTube Input Form Centered, Equal Height */}
-          <div className="flex-1 flex flex-col items-center justify-center">
-            <Card className="w-full max-w-md h-full min-h-[440px] p-4 rounded-lg shadow-md bg-secondary flex flex-col">
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold flex justify-center items-center text-center w-full">
-                  <span role="img" aria-label="music">🎵</span>
-                  <span className="mx-2">TuneFlow</span>
-                  <span role="img" aria-label="sparkles">✨</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex-1 flex flex-col justify-center">
-                <YouTubeInputForm
-                  youtubeLink={youtubeLink}
-                  setYoutubeLink={setYoutubeLink}
-                  inputMode={inputMode}
-                  setInputMode={setInputMode}
-                  scanComments={scanComments}
-                  setScanComments={setScanComments}
-                  scanDescription={scanDescription}
-                  setScanDescription={setScanDescription}
-                  scanChapters={scanChapters}
-                  setScanChapters={setScanChapters}
-                  prioritizePinned={prioritizePinned}
-                  setPrioritizePinned={setPrioritizePinned}
-                  loading={loading}
-                  onParse={handleParseComments}
-                />
-              </CardContent>
-            </Card>
-          </div>
-          {/* Parsed Songs Centered, Equal Height */}
-          <div className="flex-1 flex flex-col items-center justify-center">
-            <Card className="w-full max-w-md h-full min-h-[440px] p-4 rounded-lg shadow-md bg-secondary flex flex-col">
-              <CardHeader className="flex flex-row items-start justify-between">
-                <CardTitle className="text-lg font-semibold">Parsed Songs ({songs.length})</CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleClearParsed}
-                  disabled={songs.length === 0}
-                >
-                  Clear
-                </Button>
-              </CardHeader>
-              <CardContent className="flex-1 flex flex-col justify-center">
-                <SongList
+        <div className={`flex w-full max-w-5xl justify-center items-stretch gap-8 mt-4 ${songs.length === 0 ? 'min-h-[440px]' : ''}`}
+        >
+          {/* Grouped Section: If no songs, center YouTubeInputForm. If songs, show both side by side */}
+          {songs.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center">
+              <Card className="w-full max-w-md h-full min-h-[440px] p-4 rounded-lg shadow-md bg-secondary flex flex-col justify-center">
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold flex justify-center items-center text-center w-full">
+                    <span role="img" aria-label="music">🎵</span>
+                    <span className="mx-2">TuneFlow</span>
+                    <span role="img" aria-label="sparkles">✨</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex-1 flex flex-col justify-center">
+                  <YouTubeInputForm
+                    youtubeLink={youtubeLink}
+                    setYoutubeLink={setYoutubeLink}
+                    inputMode={inputMode}
+                    setInputMode={setInputMode}
+                    scanComments={scanComments}
+                    setScanComments={setScanComments}
+                    scanDescription={scanDescription}
+                    setScanDescription={setScanDescription}
+                    scanChapters={scanChapters}
+                    setScanChapters={setScanChapters}
+                    prioritizePinned={prioritizePinned}
+                    setPrioritizePinned={setPrioritizePinned}
+                    loading={loading}
+                    onParse={handleParseComments}
+                  />
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <>
+              <div className="flex-1 flex flex-col items-center justify-center">
+                <Card className="w-full max-w-md h-full min-h-[440px] p-4 rounded-lg shadow-md bg-secondary flex flex-col">
+                  <CardHeader>
+                    <CardTitle className="text-lg font-semibold flex justify-center items-center text-center w-full">
+                      <span role="img" aria-label="music">🎵</span>
+                      <span className="mx-2">TuneFlow</span>
+                      <span role="img" aria-label="sparkles">✨</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex-1 flex flex-col justify-center">
+                    <YouTubeInputForm
+                      youtubeLink={youtubeLink}
+                      setYoutubeLink={setYoutubeLink}
+                      inputMode={inputMode}
+                      setInputMode={setInputMode}
+                      scanComments={scanComments}
+                      setScanComments={setScanComments}
+                      scanDescription={scanDescription}
+                      setScanDescription={setScanDescription}
+                      scanChapters={scanChapters}
+                      setScanChapters={setScanChapters}
+                      prioritizePinned={prioritizePinned}
+                      setPrioritizePinned={setPrioritizePinned}
+                      loading={loading}
+                      onParse={handleParseComments}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+              <div className="flex-1 flex flex-col items-center justify-center">
+                <ParsedSongsList
                   songs={songs}
+                  onClear={handleClearParsed}
                   onFail={(failedSong) => {
                     setFailedAlbumArtSongs((prev) => {
                       if (prev.find(s => s.title === failedSong.title && s.artist === failedSong.artist)) return prev;
                       return [...prev, failedSong];
                     });
                   }}
-                />
-              </CardContent>
-            </Card>
-            {showMoreCommentsPrompt && (
-              <div className="flex justify-center mt-4">
-                <PaginationControls
-                  currentPage={commentsPage}
-                  canFetchMore={canFetchMoreComments}
-                  onFetchMore={handleFetchMoreComments}
-                  loading={loading}
+                  failedAlbumArtSongs={failedAlbumArtSongs}
                 />
               </div>
-            )}
-            {failedAlbumArtSongs.length > 0 && (
-              <div className="mt-6">
-                <div className="rounded-lg border bg-card text-card-foreground shadow-sm mb-6" style={{ background: 'var(--card-bg,rgba(238, 157, 146, 0.66))' }}>
-                  <div className="flex items-center justify-between px-6 pt-6">
-                    <h3 className="text-lg font-semibold">Songs Failed to Parse (Album Art or Search)</h3>
-                  </div>
-                  <div className="p-6 pt-0">
-                    <ul className="space-y-2 max-h-60 overflow-y-auto">
-                      {failedAlbumArtSongs.map((song) => (
-                        <li key={`fail-${hashSong(song)}`} className="flex items-center text-sm border-b pb-1">
-                          <div className="w-10 h-10 flex items-center justify-center bg-gray-200 rounded mr-3 border text-xs text-gray-500">N/A</div>
-                          <div>
-                            <div className="font-semibold">{song.title}</div>
-                            <div className="text-xs text-gray-500">{song.artist}</div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+            </>
+          )}
+          {showMoreCommentsPrompt && (
+            <div className="flex justify-center mt-4">
+              <PaginationControls
+                currentPage={commentsPage}
+                canFetchMore={canFetchMoreComments}
+                onFetchMore={handleFetchMoreComments}
+                loading={loading}
+              />
+            </div>
+          )}
+          {failedAlbumArtSongs.length > 0 && (
+            <div className="mt-6">
+              <div className="rounded-lg border bg-card text-card-foreground shadow-sm mb-6" style={{ background: 'var(--card-bg,rgba(238, 157, 146, 0.66))' }}>
+                <div className="flex items-center justify-between px-6 pt-6">
+                  <h3 className="text-lg font-semibold">Songs Failed to Parse (Album Art or Search)</h3>
+                </div>
+                <div className="p-6 pt-0">
+                  <ul className="space-y-2 max-h-60 overflow-y-auto">
+                    {failedAlbumArtSongs.map((song) => (
+                      <li key={`fail-${hashSong(song)}`} className="flex items-center text-sm border-b pb-1">
+                        <div className="w-10 h-10 flex items-center justify-center bg-gray-200 rounded mr-3 border text-xs text-gray-500">N/A</div>
+                        <div>
+                          <div className="font-semibold">{song.title}</div>
+                          <div className="text-xs text-gray-500">{song.artist}</div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
       {/* Swipable Playlist Creation Cards (Tabs) Below */}

@@ -23,6 +23,7 @@ export function PlaylistNameForm({
   setUseAiPlaylistName: (v: boolean) => void;
   disabled: boolean;
 }) {
+  // Always disable input and checkbox
   return (
     <div className="space-y-2">
       <Label htmlFor="playlist-name" className="text-sm text-muted-foreground">
@@ -31,22 +32,22 @@ export function PlaylistNameForm({
       <Input
         id="playlist-name"
         type="text"
-        placeholder="Enter playlist name"
+        placeholder="Playlist Name (DISABLED)"
         value={playlistName}
         onChange={(e) => setPlaylistName(e.target.value)}
         className="rounded-md"
-        disabled={disabled}
+        disabled
       />
       <div className="flex items-center space-x-2">
         <input
           id="ai-playlist-name"
           type="checkbox"
           checked={useAiPlaylistName}
-          onChange={(e) => setUseAiPlaylistName(e.target.checked)}
-          disabled={disabled}
+          onChange={() => {}}
+          disabled
         />
         <Label htmlFor="ai-playlist-name" className="text-sm text-muted-foreground">
-          Use AI to generate playlist name
+          Use AI to generate playlist name (DISABLED)
         </Label>
       </div>
     </div>
