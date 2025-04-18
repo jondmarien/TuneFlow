@@ -3,7 +3,7 @@
  * API route to fetch comments from a YouTube video using the YouTube Data API.
  *
  * - Accepts a video ID and an optional prioritizePinnedComments flag in the request body.
- * - Can prioritize fetching pinned comments or fetch up to 200 comments otherwise.
+ * - Can prioritize fetching pinned comments or fetch up to a configurable number of pages of top comments.
  * - Uses the googleapis package for YouTube API access.
  *
  * Request JSON:
@@ -67,7 +67,8 @@ export async function POST(req: Request) {
       }));
       allComments = pinnedComments;
     } else {
-      // --- Fetch Up To 200 Comments (2 Pages) ---
+      // --- Fetch Up To N Comments (Configurable Pages) ---
+      const MAX_PAGES = parseInt(process.env.YT_COMMENT_PAGES || '5', 10); // default 5 pages (500 comments)
       let nextPageToken: string | undefined = undefined;
       let fetchedPages = 0;
       do {
@@ -77,6 +78,7 @@ export async function POST(req: Request) {
           maxResults: 100,
           textFormat: 'plainText',
           pageToken: nextPageToken,
+          order: 'relevance', // fetch top (most liked) comments first
         });
         const comments = (response.data.items || []).map((item: youtube_v3.Schema$CommentThread) => ({
           id: item.id ?? undefined,
@@ -87,7 +89,7 @@ export async function POST(req: Request) {
         allComments = allComments.concat(comments);
         nextPageToken = response.data.nextPageToken ?? undefined;
         fetchedPages += 1;
-      } while (nextPageToken && fetchedPages < 2);
+      } while (nextPageToken && fetchedPages < MAX_PAGES);
     }
 
     return NextResponse.json({ comments: allComments });

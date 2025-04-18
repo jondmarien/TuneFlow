@@ -180,6 +180,8 @@ export default function Home() {
   const [abortPlaylist, setAbortPlaylist] = useState(false);
   const [playlistAbortController, setPlaylistAbortController] = useState<AbortController | null>(null);
   const [failedAlbumArtSongs, setFailedAlbumArtSongs] = useState<Song[]>([]);
+  const [spotifySearchStatus, setSpotifySearchStatus] = useState<'idle' | 'searching' | 'done'>('idle');
+  const [spotifySongSearches, setSpotifySongSearches] = useState<{ song: Song; status: 'pending' | 'searching' | 'found' | 'not_found' }[]>([]);
 
   // --- Effects ---
 
@@ -364,6 +366,101 @@ export default function Home() {
     }
   }
 
+  // --- Album Art Fallback Helper ---
+  // Try iTunes API as a fallback for failed album art
+  async function fetchFallbackAlbumArt(song: Song): Promise<string | null> {
+    // 1. Try iTunes
+    try {
+      const query = encodeURIComponent(`${song.title} ${song.artist}`);
+      const res = await fetch(`https://itunes.apple.com/search?term=${query}&entity=song&limit=1`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.results && data.results[0] && data.results[0].artworkUrl100) {
+          // iTunes returns 100x100, can upgrade to 600x600
+          return data.results[0].artworkUrl100.replace('100x100', '600x600');
+        }
+      }
+    } catch {}
+    // 2. Try MusicBrainz + Cover Art Archive
+    try {
+      // Step 1: Find release via MusicBrainz search
+      const mbSearchUrl = `https://musicbrainz.org/ws/2/release/?query=release:${encodeURIComponent(song.title)}%20AND%20artist:${encodeURIComponent(song.artist)}&fmt=json&limit=1`;
+      const mbRes = await fetch(mbSearchUrl, { headers: { 'Accept': 'application/json' } });
+      if (mbRes.ok) {
+        const mbData = await mbRes.json();
+        if (mbData.releases && mbData.releases[0] && mbData.releases[0].id) {
+          const mbid = mbData.releases[0].id;
+          // Step 2: Get cover art from Cover Art Archive
+          const caaUrl = `https://coverartarchive.org/release/${mbid}`;
+          const caaRes = await fetch(caaUrl);
+          if (caaRes.ok) {
+            const caaData = await caaRes.json();
+            if (caaData.images && caaData.images.length > 0) {
+              // Prefer front image thumbnail, fallback to first image
+              const front = caaData.images.find((img: any) => img.front) || caaData.images[0];
+              if (front.thumbnails && front.thumbnails["500"]) return front.thumbnails["500"];
+              if (front.thumbnails && front.thumbnails["250"]) return front.thumbnails["250"];
+              if (front.image) return front.image;
+            }
+          }
+        }
+      }
+    } catch {}
+    // If all fail
+    return null;
+  }
+
+  // --- Improved Spotify Track Search ---
+  async function robustSpotifyTrackSearch(song: Song, signal?: AbortSignal): Promise<string | null> {
+    if (!spotifyConnected) {
+      toast({
+        title: 'Spotify Login Required',
+        description: 'Please connect your Spotify account before searching for songs.',
+        variant: 'destructive',
+        position: 'top-left',
+      });
+      return null;
+    }
+    // Try several search patterns
+    const baseQuery = `${song.title} ${song.artist}`;
+    const altQueries = [
+      baseQuery,
+      song.title,
+      `${song.title.replace(/\s*\([^)]*\)/g, '')} ${song.artist}`.trim(), // Remove parentheticals
+      `${song.title} (explicit) ${song.artist}`,
+      `${song.title} (with ${song.artist})`,
+      song.artist,
+    ];
+    for (const q of altQueries) {
+      try {
+        const res = await fetch('/api/spotify/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ q }),
+          signal,
+        });
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (data.track && data.track.uri) {
+          // Fuzzy match: check if track name contains original song title (case-insensitive, ignoring parentheticals)
+          const cleanTitle = song.title.replace(/\s*\([^)]*\)/g, '').toLowerCase();
+          if (data.track.name.toLowerCase().includes(cleanTitle) || data.track.name.toLowerCase().includes(song.title.toLowerCase())) {
+            return data.track.uri;
+          }
+          // Accept if artist matches
+          if (data.track.artists && data.track.artists.some((a: any) => a.name.toLowerCase().includes(song.artist.toLowerCase()))) {
+            return data.track.uri;
+          }
+          // As fallback, just return the found URI
+          return data.track.uri;
+        }
+      } catch (err: any) {
+        if (err.name === 'AbortError') return null;
+      }
+    }
+    return null;
+  }
+
   // --- Handlers ---
 
   const handleParseComments = async () => {
@@ -508,13 +605,15 @@ export default function Home() {
       return;
     }
     setLoading(true);
+    setSpotifySearchStatus('searching');
+    setSpotifySongSearches(songs.map(song => ({ song, status: 'pending' })));
     const playlistToast = toast({ title: 'Starting Playlist Creation...', description: 'Please wait...', position: 'top-left' });
     setParsingState("Finding Songs on Spotify");
     let finalPlaylistName = playlistName;
     try {
       if (!useAiPlaylistName) {
-        // Use YouTube video title
-        const videoId = getYoutubeVideoId(youtubeLink);
+        // Use YouTube video title (robust for both URL and ID input)
+        const videoId = getCurrentVideoId();
         if (videoId) {
           const ytTitle = await fetchYoutubeTitle(videoId);
           if (ytTitle) {
@@ -532,13 +631,29 @@ export default function Home() {
         finalPlaylistName = await generateAiPlaylistName(songs);
       }
       setPlaylistName(finalPlaylistName);
-      // Find Spotify track URIs for all parsed songs
+      // Find Spotify track URIs for all parsed songs (robust search)
       let trackUris: string[] = [];
-      for (const song of songs) {
+      let failedSongs: Song[] = [];
+      for (let i = 0; i < songs.length; i++) {
         if (abortPlaylist) throw new Error('Playlist creation stopped by user.');
-        const uri = await searchSpotifyTrackUri(song, abortController.signal);
-        if (uri) trackUris.push(uri);
+        setSpotifySongSearches(prev => prev.map((entry, idx) => idx === i ? { ...entry, status: 'searching' } : entry));
+        const uri = await robustSpotifyTrackSearch(songs[i], abortController.signal);
+        if (uri) {
+          trackUris.push(uri);
+          setSpotifySongSearches(prev => prev.map((entry, idx) => idx === i ? { ...entry, status: 'found' } : entry));
+        } else {
+          failedSongs.push(songs[i]);
+          setSpotifySongSearches(prev => prev.map((entry, idx) => idx === i ? { ...entry, status: 'not_found' } : entry));
+          // Try fallback album art for failed songs (iTunes, then MusicBrainz)
+          fetchFallbackAlbumArt(songs[i]).then((art) => {
+            if (art) {
+              setFailedAlbumArtSongs(prev => prev.map(s => s.title === songs[i].title && s.artist === songs[i].artist ? { ...s, imageUrl: art } : s));
+            }
+          });
+        }
       }
+      setSpotifySearchStatus('done');
+      setFailedAlbumArtSongs(prev => [...prev, ...failedSongs]);
       // Fetch Spotify user ID
       if (abortPlaylist) throw new Error('Playlist creation stopped by user.');
       const userRes = await fetch('/api/spotify/me', { signal: abortController.signal });
@@ -553,6 +668,7 @@ export default function Home() {
         });
         setLoading(false);
         setParsingState(null);
+        setSpotifySearchStatus('idle');
         return;
       }
       const userId = userData.id;
@@ -633,6 +749,7 @@ export default function Home() {
         }
       }
     } catch (err: any) {
+      setSpotifySearchStatus('idle');
       if (err.name === 'AbortError' || err.message === 'Playlist creation stopped by user.') {
         toast({
           title: 'Playlist Creation Stopped',
@@ -742,11 +859,37 @@ export default function Home() {
     }
   };
 
-  function handleClearParsed() {
-    setYoutubeLink('');
+  const clearFailedSongs = () => {
+    setFailedAlbumArtSongs([]); // frontend state
+    sessionStorage.removeItem('failedSongs'); // for persisting failed songs in sessionStorage
+    // Optionally, POST to backend to clear failed songs server-side
+    fetch('/api/clear-failed-songs', { method: 'POST' });
+  }
+
+  const handleClearParsed = () => {
     setSongs([]);
-    sessionStorage.removeItem('youtubeLink');
+    setCanCreatePlaylist(false);
+    setParsingState(null);
+    setFailedAlbumArtSongs([]); // Clear failed songs in frontend state
+    clearFailedSongs(); // Call helper to clear failed songs everywhere
     sessionStorage.removeItem('parsedSongs');
+    sessionStorage.removeItem('youtubeLink');
+    // Optionally, clear other session storage related to failed/parsed songs
+  }
+
+  // --- Helper: Always get correct videoId for title fetch ---
+  function getCurrentVideoId() {
+    // Always extract videoId regardless of input mode
+    if (youtubeLink.includes('watch?v=')) {
+      try {
+        return new URL(youtubeLink.startsWith('http') ? youtubeLink : 'https://' + youtubeLink).searchParams.get('v') || youtubeLink;
+      } catch {
+        return youtubeLink;
+      }
+    } else {
+      // Assume raw video ID
+      return youtubeLink;
+    }
   }
 
   // --- UI Rendering ---
@@ -954,13 +1097,26 @@ export default function Home() {
                 <Checkbox
                   id="ai-playlist-name"
                   checked={useAiPlaylistName}
-                  onCheckedChange={() => {}}
+                  onCheckedChange={(checked) => {}}
                   disabled
                 />
                 <Label htmlFor="ai-playlist-name" className="text-sm text-muted-foreground">
                   Use AI to generate playlist name
                 </Label>
                 <span className="text-xs italic" style={{ color: 'red' }}>(DISABLED UNTIL I CAN FIND A SUITABLE FIX)</span>
+              </div>
+              <div className="flex justify-center w-full">
+                {spotifySearchStatus === 'searching' && (
+                  <span className="flex items-center text-sm text-yellow-600">
+                    <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
+                    Searching Spotify for Songs
+                  </span>
+                )}
+                {spotifySearchStatus === 'done' && (
+                  <span className="flex items-center text-sm text-green-600 font-bold">
+                    DONE
+                  </span>
+                )}
               </div>
             </div>
           )}
