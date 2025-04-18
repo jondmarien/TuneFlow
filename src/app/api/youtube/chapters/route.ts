@@ -15,7 +15,10 @@
  *   - error: Error information if the request fails
  */
 import { NextRequest, NextResponse } from 'next/server';
-import chaptersFinder from 'youtube-chapters-finder';
+
+// --- DEPRECATED: youtube-chapters-finder ---
+// This code is kept for reference but is no longer used for extracting chapters.
+// import chaptersFinder from 'youtube-chapters-finder';
 
 // --- Helper: Extract Video ID ---
 /**
@@ -83,32 +86,29 @@ export async function POST(req: NextRequest) {
     const videoId = extractVideoId(inputId || youtubeUrl);
     if (!videoId) return NextResponse.json({ error: 'Invalid video ID or URL.' }, { status: 400 });
 
-    // Try youtube-chapters-finder first
+    // --- Previous implementation using youtube-chapters-finder (deprecated, not used) ---
+    // try {
+    //   const rawChapters = await chaptersFinder.getChapter(videoId);
+    //   if (rawChapters && rawChapters.length > 0) {
+    //     chapters = rawChapters.map((ch: any) => ({ start: ch.time, title: ch.title }));
+    //   }
+    // } catch (err) {
+    //   const msg = typeof err === 'object' && err && 'message' in err ? (err as any).message : String(err);
+    //   console.warn('[Chapters API] youtube-chapters-finder failed:', msg);
+    // }
+
+    // --- Now always use parseChaptersFromDescription fallback ---
     let chapters: { start: string, title: string }[] = [];
     try {
-      const rawChapters = await chaptersFinder.getChapter(videoId);
-      if (rawChapters && rawChapters.length > 0) {
-        chapters = rawChapters.map((ch: any) => ({ start: ch.time, title: ch.title }));
+      const data = await fetchVideoDetails(videoId);
+      const item = data.items?.[0];
+      if (item && item.snippet?.description) {
+        chapters = parseChaptersFromDescription(item.snippet.description);
       }
     } catch (err) {
-      const msg = typeof err === 'object' && err && 'message' in err ? (err as any).message : String(err);
-      console.warn('[Chapters API] youtube-chapters-finder failed:', msg);
+      // Ignore
     }
 
-    // Fallback: parse from description if no chapters found
-    if (!chapters.length) {
-      try {
-        const data = await fetchVideoDetails(videoId);
-        const item = data.items?.[0];
-        if (item && item.snippet?.description) {
-          chapters = parseChaptersFromDescription(item.snippet.description);
-        }
-      } catch (err) {
-        // Ignore
-      }
-    }
-
-    // Restore previous fallback logic
     if (!chapters.length) {
       return NextResponse.json({ chapters: [] });
     }
