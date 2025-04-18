@@ -31,6 +31,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(req: NextRequest) {
   // Get Spotify access token from cookies
   const cookieStore = await cookies();
+  // Only use the Spotify access token for Spotify API calls
   const accessToken = cookieStore.get('spotify_access_token')?.value;
 
   // Check if access token is present
@@ -39,11 +40,19 @@ export async function POST(req: NextRequest) {
   }
 
   // Parse request body
-  const { userId, playlistName, trackUris } = await req.json();
+  let userId, playlistName, trackUris;
+  try {
+    const body = await req.json();
+    userId = body.userId;
+    playlistName = body.playlistName;
+    trackUris = body.trackUris;
+  } catch (err) {
+    return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
+  }
 
   // Validate request body
-  if (!userId || !playlistName || !trackUris || !Array.isArray(trackUris)) {
-    return NextResponse.json({ error: 'Missing userId, playlistName, or trackUris' }, { status: 400 });
+  if (!userId || typeof userId !== 'string' || !playlistName || typeof playlistName !== 'string' || !trackUris || !Array.isArray(trackUris) || trackUris.length === 0) {
+    return NextResponse.json({ error: 'Missing or invalid userId, playlistName, or trackUris' }, { status: 400 });
   }
 
   // --- Create Playlist ---

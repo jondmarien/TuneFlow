@@ -8,10 +8,24 @@ import type { Song } from "@/types/tuneflow";
  * @returns playlistUrl (string) if successful
  */
 export async function createSpotifyPlaylist(songs: Song[], playlistName: string, useAiName: boolean): Promise<string> {
+  // Fetch Spotify user ID
+  const userRes = await fetch("/api/spotify/me");
+  const userData = await userRes.json();
+  if (!userData.id) {
+    throw new Error("Could not fetch Spotify user ID");
+  }
+  // Find Spotify track URIs for all parsed songs
+  const trackUris = await Promise.all(
+    songs.map((song) => searchSpotifyTrackUri(song))
+  );
+  const validTrackUris = trackUris.filter(Boolean);
+  if (validTrackUris.length === 0) {
+    throw new Error("No valid Spotify tracks found for the selected songs");
+  }
   const resp = await fetch('/api/spotify/playlist', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ songs, playlistName, useAiName }),
+    body: JSON.stringify({ userId: userData.id, playlistName, trackUris: validTrackUris }),
   });
   const data = await resp.json();
   if (resp.ok && data.playlistUrl) {

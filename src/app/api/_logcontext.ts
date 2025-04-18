@@ -3,7 +3,7 @@
 
 import { AsyncLocalStorage } from 'async_hooks';
 
-// Define the type for our context
+// Define the type for context
 interface RequestContext {
   ip?: string;
 }

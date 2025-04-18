@@ -130,6 +130,18 @@ export default function Home() {
   const [confirmationTitle, setConfirmationTitle] = useState('');
   const [confirmationDescription, setConfirmationDescription] = useState('');
   const [inputMode, setInputMode] = useState<'url' | 'id'>('url');
+  // --- Playlist Service Selection State ---
+  const [selectedService, setSelectedService] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('selectedService') || 'spotify';
+    }
+    return 'spotify';
+  });
+  // Persist selected service to localStorage
+  useEffect(() => {
+    if (!mounted) return;
+    localStorage.setItem('selectedService', selectedService);
+  }, [selectedService, mounted]);
 
   // --- Effects ---
 
@@ -681,7 +693,7 @@ export default function Home() {
           {/* Swipable Playlist Creation Cards (Tabs) Below */}
           <div className="w-full flex flex-col items-center mt-8">
             <div className="w-full max-w-md">
-              <Tabs defaultValue="youtube" className="w-full">
+              <Tabs value={selectedService} onValueChange={setSelectedService} className="w-full">
                 <TabsList className="w-full flex justify-between mb-4">
                   <TabsTrigger value="youtube" className="flex-1">YouTube Playlist</TabsTrigger>
                   <TabsTrigger value="spotify" className="flex-1">Spotify Playlist</TabsTrigger>
@@ -726,6 +738,7 @@ export default function Home() {
                     useAiPlaylistName={useAiPlaylistName}
                     setUseAiPlaylistName={setUseAiPlaylistName}
                     connected={!!spotifyConnected}
+                    youtubeLink={youtubeLink}
                     onSuccess={(url) => {
                       setSpotifyPlaylistUrl(url);
                       setSpotifyAllSongsFound(true); // Assume all found for now
