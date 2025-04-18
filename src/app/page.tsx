@@ -32,6 +32,7 @@ import { PaginationControls } from "@/components/PaginationControls";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ConfirmationDialog } from "@/components/ConfirmationDialog";
 import { fetchFallbackAlbumArt, AlbumArtDialog as AlbumArtDialogComponent } from "@/components/AlbumArtDialog";
+import { PlaylistCreateForm } from "@/components/PlaylistCreateForm";
 
 // Define Song type locally or in a shared types file if needed elsewhere
 type Song = {
@@ -89,8 +90,6 @@ export default function Home() {
   const [spotifyReady, setSpotifyReady] = useState(true); // Assume ready for basic search initially
   const [parsingState, setParsingState] = useState<string | null>(null); // More specific state tracking
   const [canCreatePlaylist, setCanCreatePlaylist] = useState(false);
-  const [abortPlaylist, setAbortPlaylist] = useState(false);
-  const [playlistAbortController, setPlaylistAbortController] = useState<AbortController | null>(null);
   const [failedAlbumArtSongs, setFailedAlbumArtSongs] = useState<Song[]>([]);
   const [spotifySearchStatus, setSpotifySearchStatus] = useState<'idle' | 'searching' | 'done'>('idle');
   const [spotifySongSearches, setSpotifySongSearches] = useState<{ song: Song; status: 'pending' | 'searching' | 'found' | 'not_found' }[]>([]);
@@ -486,318 +485,6 @@ export default function Home() {
     handleParseComments({ fetchMoreComments: true });
   };
 
-  const handleCreatePlaylist = async () => {
-    setAbortPlaylist(false);
-    const abortController = new AbortController();
-    setPlaylistAbortController(abortController);
-    console.log('handleCreatePlaylist started');
-    if (!spotifyConnected) {
-      toast({ title: 'Spotify Login Required', description: 'Please connect your Spotify account before creating a playlist.', variant: 'destructive', position: 'top-left' });
-      return;
-    }
-    if (songs.length === 0) {
-      console.warn('No songs available to create playlist');
-      toast({ title: "No Songs", description: "No songs found to add to the playlist.", variant: "destructive", position: 'top-left' });
-      return;
-    }
-    setLoading(true);
-    setSpotifySearchStatus('searching');
-    setSpotifySongSearches(songs.map(song => ({ song, status: 'pending' })));
-    setCurrentSpotifySearchSong(null); // Reset before starting
-    setSpotifyPlaylistUrl(null); // Reset before starting
-    setSpotifyAllSongsFound(null); // Reset before starting
-    const playlistToast = toast({ title: 'Starting Playlist Creation...', description: 'Please wait...', position: 'top-left' });
-    setParsingState("Finding Songs on Spotify");
-    let finalPlaylistName = playlistName;
-    try {
-      if (!useAiPlaylistName) {
-        // Use YouTube video title (robust for both URL and ID input)
-        const videoId = getCurrentVideoId();
-        if (videoId) {
-          const ytTitle = await fetchYoutubeTitle(videoId);
-          if (ytTitle) {
-            finalPlaylistName = ytTitle;
-          } else {
-            toast({ title: 'YouTube Title Error', description: 'Could not fetch YouTube video title. Using fallback name.', variant: 'destructive', position: 'top-left' });
-            finalPlaylistName = 'TuneFlow Playlist';
-          }
-        } else {
-          toast({ title: 'YouTube Link Error', description: 'Could not extract video ID from YouTube link. Using fallback name.', variant: 'destructive', position: 'top-left' });
-          finalPlaylistName = 'TuneFlow Playlist';
-        }
-      } else {
-        // Use AI-generated name, but fail if genres can't be fetched
-        finalPlaylistName = await generateAiPlaylistName(songs);
-      }
-      setPlaylistName(finalPlaylistName);
-      // Find Spotify track URIs for all parsed songs (robust search)
-      let trackUris: string[] = [];
-      let failedSongs: Song[] = [];
-      for (let i = 0; i < songs.length; i++) {
-        if (abortPlaylist) throw new Error('Playlist creation stopped by user.');
-        setCurrentSpotifySearchSong(songs[i]); // <-- Set current song being searched
-        setSpotifySongSearches(prev => prev.map((entry, idx) => idx === i ? { ...entry, status: 'searching' } : entry));
-        const uri = await robustSpotifyTrackSearch(songs[i], abortController.signal);
-        if (uri) {
-          trackUris.push(uri);
-          setSpotifySongSearches(prev => prev.map((entry, idx) => idx === i ? { ...entry, status: 'found' } : entry));
-        } else {
-          failedSongs.push(songs[i]);
-          setSpotifySongSearches(prev => prev.map((entry, idx) => idx === i ? { ...entry, status: 'not_found' } : entry));
-          setFailedAlbumArtSongs(prev => {
-            // Only add if not already present
-            if (prev.find(s => s.title === songs[i].title && s.artist === songs[i].artist)) return prev;
-            return [...prev, songs[i]];
-          });
-          // Try fallback album art for failed songs (iTunes, then MusicBrainz)
-          fetchFallbackAlbumArt(songs[i]).then((art: string | null) => {
-            if (art) {
-              setFailedAlbumArtSongs(prev => prev.map(s => s.title === songs[i].title && s.artist === songs[i].artist ? { ...s, imageUrl: art } : s));
-            }
-          });
-        }
-      }
-      setCurrentSpotifySearchSong(null); // Clear at the end
-      setSpotifySearchStatus('done');
-      setFailedAlbumArtSongs(prev => {
-        // Only add missing failedSongs (should be a no-op if already added above)
-        const all = [...prev];
-        for (const fs of failedSongs) {
-          if (!all.find(s => s.title === fs.title && s.artist === fs.artist)) {
-            all.push(fs);
-          }
-        }
-        return all;
-      });
-      // Fetch Spotify user ID
-      if (abortPlaylist) throw new Error('Playlist creation stopped by user.');
-      const userRes = await fetch('/api/spotify/me', { signal: abortController.signal });
-      const userData = await userRes.json();
-      if (!userData.id) {
-        playlistToast.update({
-          id: playlistToast.id,
-          title: 'Spotify User Error',
-          description: 'Could not fetch Spotify user ID.',
-          variant: 'destructive',
-          position: 'top-left',
-        });
-        setLoading(false);
-        setParsingState(null);
-        setSpotifySearchStatus('idle');
-        return;
-      }
-      const userId = userData.id;
-      // --- Playlist Creation Request ---
-      if (abortPlaylist) throw new Error('Playlist creation stopped by user.');
-      const createResponse = await fetch('/api/spotify/playlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          playlistName: finalPlaylistName,
-          trackUris,
-        }),
-        signal: abortController.signal,
-      });
-      let createData;
-      let createIsJson = false;
-      const createContentType = createResponse.headers.get('content-type');
-      if (createContentType && createContentType.includes('application/json')) {
-        try {
-          createData = await createResponse.json();
-          createIsJson = true;
-        } catch (err) {
-          createData = { error: 'Failed to parse JSON response from /api/spotify/playlist.' };
-        }
-      } else {
-        createData = { error: 'Received non-JSON response from /api/spotify/playlist.' };
-      }
-      if (!createResponse.ok) {
-        const errorMessage = createData?.error || createData?.message || `Failed to create playlist (Status: ${createResponse.status})`;
-        playlistToast.update({
-          id: playlistToast.id,
-          title: "Playlist Creation Failed",
-          description: errorMessage,
-          variant: "destructive",
-          position: 'top-left',
-        });
-        throw new Error(errorMessage);
-      } else {
-        playlistToast.dismiss();
-        setSpotifyPlaylistUrl(createData.playlistUrl || null);
-        setSpotifyAllSongsFound(failedSongs.length === 0);
-        // Show green, non-fading toast with playlist URL
-        playlistToast.update({
-          id: playlistToast.id,
-          title: 'Playlist Created!',
-          description: (
-            <span>
-              Playlist '{finalPlaylistName}' created successfully!{' '}
-              {createData.playlistUrl && (
-                <a href={createData.playlistUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#22c55e', fontWeight: 'bold', textDecoration: 'underline' }}>
-                  Open Playlist
-                </a>
-              )}
-            </span>
-          ),
-          variant: 'default',
-          duration: 1000000,
-          position: 'top-right',
-        });
-        toast({
-          title: 'Playlist Created!',
-          description: (
-            <span>
-              Playlist '{finalPlaylistName}' created successfully!{' '}
-              {createData.playlistUrl && (
-                <a href={createData.playlistUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#22c55e', fontWeight: 'bold', textDecoration: 'underline' }}>
-                  Open Playlist
-                </a>
-              )}
-            </span>
-          ),
-          variant: 'default',
-          duration: 1000000,
-          position: 'top-right',
-        });
-        console.log(`Successfully created playlist '${finalPlaylistName}' with ${trackUris.length} tracks. Spotify URL:`, createData.playlistUrl);
-        if (createData.playlistUrl) {
-          console.log('Playlist URL:', createData.playlistUrl);
-        }
-      }
-    } catch (err: any) {
-      setSpotifySearchStatus('idle');
-      setCurrentSpotifySearchSong(null);
-      setSpotifyPlaylistUrl(null);
-      setSpotifyAllSongsFound(null);
-      if (err.name === 'AbortError' || err.message === 'Playlist creation stopped by user.') {
-        toast({
-          title: 'Playlist Creation Stopped',
-          description: 'Playlist creation was aborted by the user.',
-          variant: 'destructive',
-          position: 'top-left',
-        });
-      } else {
-        console.error("Error during handleCreatePlaylist:", err);
-        return;
-      }
-      setLoading(false);
-      setParsingState(null);
-      toast({
-        title: 'Playlist Creation Error',
-        description: err.message || 'Could not create Spotify playlist.',
-        variant: 'destructive',
-        position: 'top-left',
-      });
-      console.error('Playlist Creation Error:', err);
-    } finally {
-      setLoading(false);
-      setParsingState(null);
-      setAbortPlaylist(false);
-      setPlaylistAbortController(null);
-      setCurrentSpotifySearchSong(null);
-    }
-  };
-
-  const handleStopPlaylist = () => {
-    if (playlistAbortController) {
-      playlistAbortController.abort();
-    }
-    setAbortPlaylist(true);
-  };
-
-  useEffect(() => {
-    if (abortPlaylist) {
-      setLoading(false);
-      setParsingState(null);
-      toast({
-        title: 'Playlist Creation Stopped',
-        description: 'Playlist creation was aborted by the user.',
-        variant: 'destructive',
-        position: 'top-left',
-      });
-    }
-  }, [abortPlaylist]);
-
-  const handleCreateYouTubePlaylist = async () => {
-    if (!youtubeConnected) {
-      toast({ title: 'YouTube Login Required', description: 'Please connect your YouTube (Google) account before creating a playlist.', variant: 'destructive', position: 'top-left' });
-      return;
-    }
-    if (songs.length === 0) {
-      toast({ title: 'No Songs', description: 'No songs available to create a YouTube playlist.', variant: 'destructive', position: 'top-left' });
-      return;
-    }
-    setLoading(true);
-    try {
-      // --- Get videoIds from songs ---
-      const videoIds = songs.map(song => song.videoId).filter((id): id is string => Boolean(id));
-
-      // --- Get YouTube video title for playlist name ---
-      let playlistTitle = 'TuneFlow Playlist';
-      const videoId = getYoutubeVideoId(youtubeLink);
-      if (videoId) {
-        const ytTitle = await fetchYoutubeTitle(videoId);
-        if (ytTitle) playlistTitle = ytTitle;
-      }
-
-      // --- Create playlist with correct title and videoIds ---
-      const res = await fetch('/api/youtube/playlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          playlistName: playlistTitle,
-          description: `Created with TuneFlow from YouTube comments`,
-          videoIds: videoIds.length > 0 ? videoIds : undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast({ title: 'YouTube Playlist Error', description: data.error || 'Could not create YouTube playlist.', variant: 'destructive', position: 'top-left' });
-        setLoading(false);
-        return;
-      }
-      toast({
-        title: 'Playlist Created!',
-        description: (
-          <span>
-            Playlist created successfully!{' '}
-            {data.playlistUrl && (
-              <a href={data.playlistUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#ef4444', fontWeight: 'bold', textDecoration: 'underline' }}>
-                Open Playlist
-              </a>
-            )}
-          </span>
-        ),
-        variant: 'default',
-        duration: 10000,
-        position: 'top-right',
-      });
-    } catch (err: any) {
-      toast({ title: 'YouTube Playlist Error', description: err.message || 'Could not create YouTube playlist.', variant: 'destructive', position: 'top-left' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const clearFailedSongs = () => {
-    setFailedAlbumArtSongs([]); // frontend state
-    sessionStorage.removeItem('failedSongs'); // for persisting failed songs in sessionStorage
-    // Clear failed songs in Redis using standardized cache key
-    const videoId = getYoutubeVideoId(youtubeLink);
-    if (videoId) {
-      const cacheKey = `failed_songs:${videoId}`;
-      fetch('/api/clear-failed-songs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cacheKey })
-      });
-    } else {
-      // fallback: clear generic key if videoId is not available
-      fetch('/api/clear-failed-songs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cacheKey: 'failed_songs' }) });
-    }
-  }
-
   const handleClearParsed = () => {
     setConfirmationTitle('Clear Parsed Songs?');
     setConfirmationDescription('Are you sure you want to clear all parsed songs? This action cannot be undone.');
@@ -809,7 +496,7 @@ export default function Home() {
     setCanCreatePlaylist(false);
     setParsingState(null);
     setFailedAlbumArtSongs([]); // Clear failed songs in frontend state
-    clearFailedSongs(); // Call helper to clear failed songs everywhere
+    // clearFailedSongs(); // Call helper to clear failed songs everywhere
     sessionStorage.removeItem('parsedSongs');
     sessionStorage.removeItem('youtubeLink');
     // Optionally, clear other session storage related to failed/parsed songs
@@ -925,62 +612,135 @@ export default function Home() {
       <div className="my-6 w-full flex justify-center">
         <hr className="w-full max-w-md border-t-2 border-gray-200" />
       </div>
-      <Card className="w-full max-w-md p-4 rounded-lg shadow-md bg-secondary">
-        <CardHeader className="flex flex-row items-start justify-between">
-          <CardTitle className="text-lg font-semibold">Parsed Songs ({songs.length})</CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleClearParsed}
-            disabled={songs.length === 0}
-          >
-            Clear
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <SongList
-            songs={songs}
-            onFail={(failedSong) => {
-              setFailedAlbumArtSongs((prev) => {
-                if (prev.find(s => s.title === failedSong.title && s.artist === failedSong.artist)) return prev;
-                return [...prev, failedSong];
-              });
-            }}
-          />
-        </CardContent>
-      </Card>
-      {showMoreCommentsPrompt && (
-        <div className="flex justify-center mt-4">
-          <PaginationControls
-            currentPage={commentsPage}
-            canFetchMore={canFetchMoreComments}
-            onFetchMore={handleFetchMoreComments}
-            loading={loading}
-          />
-        </div>
-      )}
-      {failedAlbumArtSongs.length > 0 && (
-        <div className="mt-6">
-          <div className="rounded-lg border bg-card text-card-foreground shadow-sm mb-6" style={{ background: 'var(--card-bg,rgba(238, 157, 146, 0.66))' }}>
-            <div className="flex items-center justify-between px-6 pt-6">
-              <h3 className="text-lg font-semibold">Songs Failed to Parse (Album Art or Search)</h3>
-            </div>
-            <div className="p-6 pt-0">
-              <ul className="space-y-2 max-h-60 overflow-y-auto">
-                {failedAlbumArtSongs.map((song) => (
-                  <li key={`fail-${hashSong(song)}`} className="flex items-center text-sm border-b pb-1">
-                    <div className="w-10 h-10 flex items-center justify-center bg-gray-200 rounded mr-3 border text-xs text-gray-500">N/A</div>
-                    <div>
-                      <div className="font-semibold">{song.title}</div>
-                      <div className="text-xs text-gray-500">{song.artist}</div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
+      {/* Playlist Creation Forms - now positioned left and right of parsed songs */}
+      <div className="w-full flex flex-col items-center">
+        <div className="flex flex-row w-full max-w-5xl justify-center items-start space-x-8 mt-8">
+          {/* YouTube Playlist Box - Left */}
+          <div className="flex-1 flex justify-end">
+            <PlaylistCreateForm
+              songs={songs}
+              service="youtube"
+              playlistName={playlistName}
+              setPlaylistName={setPlaylistName}
+              useAiPlaylistName={useAiPlaylistName}
+              setUseAiPlaylistName={setUseAiPlaylistName}
+              connected={youtubeConnected}
+              youtubeLink={youtubeLink}
+              onSuccess={(url) => {
+                toast({
+                  title: 'YouTube Playlist Created!',
+                  description: (
+                    <span>
+                      Playlist created successfully!{' '}
+                      {url && (
+                        <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#ef4444', fontWeight: 'bold', textDecoration: 'underline' }}>
+                          Open Playlist
+                        </a>
+                      )}
+                    </span>
+                  ),
+                  variant: 'default',
+                  duration: 10000,
+                  position: 'top-right',
+                });
+              }}
+              onError={(err) => toast({ title: 'YouTube Playlist Error', description: err, variant: 'destructive', position: 'top-left' })}
+            />
+          </div>
+          {/* Parsed Songs Center */}
+          <div className="flex-1 flex flex-col items-center">
+            <Card className="w-full max-w-md p-4 rounded-lg shadow-md bg-secondary">
+              <CardHeader className="flex flex-row items-start justify-between">
+                <CardTitle className="text-lg font-semibold">Parsed Songs ({songs.length})</CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClearParsed}
+                  disabled={songs.length === 0}
+                >
+                  Clear
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <SongList
+                  songs={songs}
+                  onFail={(failedSong) => {
+                    setFailedAlbumArtSongs((prev) => {
+                      if (prev.find(s => s.title === failedSong.title && s.artist === failedSong.artist)) return prev;
+                      return [...prev, failedSong];
+                    });
+                  }}
+                />
+              </CardContent>
+            </Card>
+            {showMoreCommentsPrompt && (
+              <div className="flex justify-center mt-4">
+                <PaginationControls
+                  currentPage={commentsPage}
+                  canFetchMore={canFetchMoreComments}
+                  onFetchMore={handleFetchMoreComments}
+                  loading={loading}
+                />
+              </div>
+            )}
+            {failedAlbumArtSongs.length > 0 && (
+              <div className="mt-6">
+                <div className="rounded-lg border bg-card text-card-foreground shadow-sm mb-6" style={{ background: 'var(--card-bg,rgba(238, 157, 146, 0.66))' }}>
+                  <div className="flex items-center justify-between px-6 pt-6">
+                    <h3 className="text-lg font-semibold">Songs Failed to Parse (Album Art or Search)</h3>
+                  </div>
+                  <div className="p-6 pt-0">
+                    <ul className="space-y-2 max-h-60 overflow-y-auto">
+                      {failedAlbumArtSongs.map((song) => (
+                        <li key={`fail-${hashSong(song)}`} className="flex items-center text-sm border-b pb-1">
+                          <div className="w-10 h-10 flex items-center justify-center bg-gray-200 rounded mr-3 border text-xs text-gray-500">N/A</div>
+                          <div>
+                            <div className="font-semibold">{song.title}</div>
+                            <div className="text-xs text-gray-500">{song.artist}</div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          {/* Spotify Playlist Box - Right */}
+          <div className="flex-1 flex justify-start">
+            <PlaylistCreateForm
+              songs={songs}
+              service="spotify"
+              playlistName={playlistName}
+              setPlaylistName={setPlaylistName}
+              useAiPlaylistName={useAiPlaylistName}
+              setUseAiPlaylistName={setUseAiPlaylistName}
+              connected={!!spotifyConnected}
+              onSuccess={(url) => {
+                setSpotifyPlaylistUrl(url);
+                setSpotifyAllSongsFound(true); // Assume all found for now
+                toast({
+                  title: 'Spotify Playlist Created!',
+                  description: (
+                    <span>
+                      Playlist created successfully!{' '}
+                      {url && (
+                        <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#22c55e', fontWeight: 'bold', textDecoration: 'underline' }}>
+                          Open Playlist
+                        </a>
+                      )}
+                    </span>
+                  ),
+                  variant: 'default',
+                  duration: 10000,
+                  position: 'top-right',
+                });
+              }}
+              onError={(err) => toast({ title: 'Spotify Playlist Error', description: err, variant: 'destructive', position: 'top-left' })}
+            />
           </div>
         </div>
-      )}
+      </div>
       {/* Footer */}
       <footer className="w-full max-w-md mx-auto mt-12 mb-4 text-center text-xs text-foreground">
         <hr className="mb-3" />
