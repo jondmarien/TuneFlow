@@ -186,6 +186,11 @@ export default function Home() {
   const [spotifyPlaylistUrl, setSpotifyPlaylistUrl] = useState<string | null>(null);
   const [spotifyAllSongsFound, setSpotifyAllSongsFound] = useState<boolean | null>(null);
 
+  // --- Add state for comment pagination and prompt ---
+  const [commentsPage, setCommentsPage] = useState(1);
+  const [showMoreCommentsPrompt, setShowMoreCommentsPrompt] = useState(false);
+  const [canFetchMoreComments, setCanFetchMoreComments] = useState(false);
+
   // --- Effects ---
 
   // Check Spotify connection
@@ -466,7 +471,7 @@ export default function Home() {
 
   // --- Handlers ---
 
-  const handleParseComments = async () => {
+  const handleParseComments = async (opts?: { fetchMoreComments?: boolean }) => {
     console.log('handleParseComments started');
     if (!youtubeLink) {
       console.warn('YouTube link missing');
@@ -486,6 +491,9 @@ export default function Home() {
     setSongs([]);
     setFailedAlbumArtSongs([]);
     setCanCreatePlaylist(false);
+    setShowMoreCommentsPrompt(false);
+    setCommentsPage(opts?.fetchMoreComments ? commentsPage + 1 : 1);
+    let currentPage = opts?.fetchMoreComments ? commentsPage + 1 : 1;
 
     const parseToast = toast({ title: 'Starting YouTube Comment Parsing...', description: 'Please wait...', position: 'top-left' });
     console.log('Initiating YouTube comment parsing...');
@@ -495,7 +503,7 @@ export default function Home() {
     let errors: string[] = [];
     let allSongs: Song[] = [];
 
-    // Chapters extraction
+    // --- Chapters extraction (independent) ---
     if (scanChapters) {
       setLoading(true);
       setSongs([]);
@@ -522,7 +530,7 @@ export default function Home() {
       }
     }
 
-    // Description extraction
+    // --- Description extraction (independent) ---
     if (scanDescription) {
       try {
         const resp = await fetch('/api/youtube/description', {
@@ -544,16 +552,17 @@ export default function Home() {
       }
     }
 
-    // Comments extraction
+    // --- Comments extraction (independent, paginated) ---
     if (scanComments) {
       try {
         setParsingState("Fetching & Parsing Comments");
         const resp = await fetch('/api/youtube/comments', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ videoId, prioritizePinnedComments: prioritizePinned }),
+          body: JSON.stringify({ videoId, prioritizePinnedComments: prioritizePinned, page: currentPage }),
         });
         const data = await resp.json();
+        setCanFetchMoreComments(!!data.canFetchMoreComments);
         if (!resp.ok) throw new Error(data.error || 'Failed to fetch comments');
         if (data.comments?.length) {
           setParsingState("Processing Comments with AI");
@@ -561,6 +570,12 @@ export default function Home() {
           allSongs = allSongs.concat(aiResult.songs.map(song => ({ ...song, imageUrl: song.imageUrl ?? undefined })));
         } else {
           errors.push('No comments found with tracklist/songlist in this video.');
+        }
+        // After 2 pages and no songs, show prompt
+        if (scanComments && currentPage >= 2 && allSongs.length === 0 && !!data.canFetchMoreComments) {
+          setShowMoreCommentsPrompt(true);
+        } else {
+          setShowMoreCommentsPrompt(false);
         }
       } catch (err: any) {
         errors.push('Comments extraction failed: ' + (err.message || String(err)));
@@ -591,6 +606,11 @@ export default function Home() {
         position: 'top-left',
       });
     }
+  };
+
+  // --- Add handler for the "Check more pages for tracklist?" button ---
+  const handleFetchMoreComments = () => {
+    handleParseComments({ fetchMoreComments: true });
   };
 
   const handleCreatePlaylist = async () => {
@@ -1078,7 +1098,7 @@ export default function Home() {
               className="block w-full"
             >
               <Button
-                onClick={handleParseComments}
+                onClick={() => handleParseComments({ fetchMoreComments: false })}
                 disabled={loading || !youtubeLink}
                 className="w-full rounded-md bg-blue-700 hover:bg-blue-400 text-white font-semibold shadow disabled:cursor-not-allowed transition-colors duration-150"
               >
@@ -1200,6 +1220,13 @@ export default function Home() {
             </ul>
           </CardContent>
         </Card>
+      )}
+      {showMoreCommentsPrompt && (
+        <div className="flex justify-center mt-4">
+          <Button onClick={handleFetchMoreComments} disabled={loading} variant="outline">
+            Check more pages for tracklist?
+          </Button>
+        </div>
       )}
       {failedAlbumArtSongs.length > 0 && (
         <div className="mt-6">
