@@ -183,6 +183,8 @@ export default function Home() {
   const [spotifySearchStatus, setSpotifySearchStatus] = useState<'idle' | 'searching' | 'done'>('idle');
   const [spotifySongSearches, setSpotifySongSearches] = useState<{ song: Song; status: 'pending' | 'searching' | 'found' | 'not_found' }[]>([]);
   const [currentSpotifySearchSong, setCurrentSpotifySearchSong] = useState<Song | null>(null);
+  const [spotifyPlaylistUrl, setSpotifyPlaylistUrl] = useState<string | null>(null);
+  const [spotifyAllSongsFound, setSpotifyAllSongsFound] = useState<boolean | null>(null);
 
   // --- Effects ---
 
@@ -609,6 +611,8 @@ export default function Home() {
     setSpotifySearchStatus('searching');
     setSpotifySongSearches(songs.map(song => ({ song, status: 'pending' })));
     setCurrentSpotifySearchSong(null); // Reset before starting
+    setSpotifyPlaylistUrl(null); // Reset before starting
+    setSpotifyAllSongsFound(null); // Reset before starting
     const playlistToast = toast({ title: 'Starting Playlist Creation...', description: 'Please wait...', position: 'top-left' });
     setParsingState("Finding Songs on Spotify");
     let finalPlaylistName = playlistName;
@@ -727,6 +731,8 @@ export default function Home() {
         throw new Error(errorMessage);
       } else {
         playlistToast.dismiss();
+        setSpotifyPlaylistUrl(createData.playlistUrl || null);
+        setSpotifyAllSongsFound(failedSongs.length === 0);
         // Show green, non-fading toast with playlist URL
         playlistToast.update({
           id: playlistToast.id,
@@ -769,6 +775,8 @@ export default function Home() {
     } catch (err: any) {
       setSpotifySearchStatus('idle');
       setCurrentSpotifySearchSong(null);
+      setSpotifyPlaylistUrl(null);
+      setSpotifyAllSongsFound(null);
       if (err.name === 'AbortError' || err.message === 'Playlist creation stopped by user.') {
         toast({
           title: 'Playlist Creation Stopped',
@@ -1126,21 +1134,47 @@ export default function Home() {
                 <span className="text-xs italic" style={{ color: 'red' }}>(DISABLED UNTIL I CAN FIND A SUITABLE FIX)</span>
               </div>
               {/* --- Current Spotify Song Search Status --- */}
-              {spotifySearchStatus === 'searching' && (
-                <div className="flex items-center text-sm text-yellow-600">
-                  <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                  {currentSpotifySearchSong ? (
-                    <span>Searching for: <span className="font-semibold">{currentSpotifySearchSong.title}</span> by <span className="font-semibold">{currentSpotifySearchSong.artist}</span></span>
-                  ) : (
-                    <span>Searching Spotify for Songs</span>
-                  )}
-                </div>
-              )}
-              {spotifySearchStatus === 'done' && (
-                <span className="flex items-center text-sm text-green-600 font-bold">
-                  DONE
-                </span>
-              )}
+              <div className="flex flex-col items-center justify-center w-full text-center">
+                {spotifySearchStatus === 'searching' && (
+                  <div className="flex flex-col items-center justify-center w-full text-center">
+                    <span className="flex items-center justify-center text-sm text-yellow-600 w-full text-center">
+                      <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
+                      {currentSpotifySearchSong ? (
+                        <span>Searching for: <span className="font-semibold">{currentSpotifySearchSong.title}</span> by <span className="font-semibold">{currentSpotifySearchSong.artist}</span></span>
+                      ) : (
+                        <span>Searching Spotify for Songs</span>
+                      )}
+                    </span>
+                  </div>
+                )}
+                {spotifySearchStatus === 'done' && spotifyAllSongsFound === true && (
+                  <div className="flex flex-col items-center justify-center w-full text-center">
+                    <span className="text-green-700 font-bold text-center w-full" style={{fontSize:'1.1rem'}}>
+                      SPOTIFY SEARCH COMPLETE: ALL SONGS FOUND ON SPOTIFY.
+                    </span>
+                    {spotifyPlaylistUrl && (
+                      <a href={spotifyPlaylistUrl} target="_blank" rel="noopener noreferrer" className="block mt-2 text-green-700 font-bold underline text-center" style={{fontSize:'1.1rem'}}>
+                        Open Playlist
+                      </a>
+                    )}
+                  </div>
+                )}
+                {spotifySearchStatus === 'done' && spotifyAllSongsFound === false && (
+                  <div className="flex flex-col items-center justify-center w-full text-center">
+                    <span className="text-green-700 font-bold text-center w-full" style={{fontSize:'1.1rem'}}>
+                      SPOTIFY SEARCH COMPLETE: SEE BELOW MESSAGE FOR DETAILS
+                    </span>
+                    <span className="text-red-700 font-bold text-center w-full mt-2" style={{fontSize:'1.1rem'}}>
+                      SOME SONGS FAILED TO PARSE; SEE FAILED SONGS LIST
+                    </span>
+                    {spotifyPlaylistUrl && (
+                      <a href={spotifyPlaylistUrl} target="_blank" rel="noopener noreferrer" className="block mt-2 text-green-700 font-bold underline text-center" style={{fontSize:'1.1rem'}}>
+                        Open Playlist
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </CardContent>
