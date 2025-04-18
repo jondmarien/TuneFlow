@@ -350,19 +350,17 @@ const parseYouTubeCommentFlow = ai.defineFlow<
     let allSongs: { title: string; artist: string }[] = [];
 
     // --- Step 2: Full-prompt batching logic ---
-    if (input.prioritizePinnedComments) {
-      for (const batch of batches) {
-        if (batch.length === 0) continue;
-        try {
-          const songs = await processCommentBatch(batch);
-          allSongs = allSongs.concat(songs);
-          if (songs.length >= 5) {
-            console.log(`[parseYouTubeCommentFlow] Detected a tracklist with ${songs.length} songs in batch. Stopping further comment processing.`);
-            break;
-          }
-        } catch (error) {
-          console.error(`[parseYouTubeCommentFlow] Error processing comment batch:`, error);
+    for (const batch of batches) {
+      if (batch.length === 0) continue;
+      try {
+        const songs = await processCommentBatch(batch);
+        allSongs = allSongs.concat(songs);
+        if (songs.length >= 5) {
+          console.log(`[parseYouTubeCommentFlow] Detected a tracklist with ${songs.length} songs in batch. Stopping further comment processing.`);
+          break;
         }
+      } catch (error) {
+        console.error(`[parseYouTubeCommentFlow] Error processing comment batch:`, error);
       }
     }
 
