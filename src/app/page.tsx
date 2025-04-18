@@ -33,6 +33,8 @@ import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ConfirmationDialog } from "@/components/ConfirmationDialog";
 import { fetchFallbackAlbumArt, AlbumArtDialog as AlbumArtDialogComponent } from "@/components/AlbumArtDialog";
 import { PlaylistCreateForm } from "@/components/PlaylistCreateForm";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { YoutubeStatusBanner } from "@/components/YoutubeStatusBanner";
 
 // Define Song type locally or in a shared types file if needed elsewhere
 type Song = {
@@ -551,26 +553,12 @@ export default function Home() {
             {/* YouTube Connection Status */}
             <div className="flex items-center space-x-2">
               {youtubeIcon}
-              <span className="font-semibold text-red-600">YouTube</span>
-              {youtubeConnected ? (
-                <span className="ml-1 text-xs px-2 py-0.5 rounded bg-[#f8d7da]" style={{ backgroundColor: '#f8d7da', color: '#f472b6', fontWeight: 600, border: '1px solid #fca5a5', minWidth: 90, display: 'inline-block', textAlign: 'center' }}>
-                  CONNECTED!
-                </span>
-              ) : (
-                <Button variant="outline" size="sm" className="ml-2 border-red-500 text-red-600 hover:bg-red-50" onClick={() => signIn('google')}>Connect</Button>
-              )}
+              <YoutubeStatusBanner youtubeConnected={youtubeConnected} loading={loading} />
             </div>
             {/* Spotify Connection Status */}
             <div className="flex items-center space-x-2">
               {spotifyIcon}
-              <span className="font-semibold" style={{ color: '#1DB954' }}>Spotify</span>
-              {spotifyConnected ? (
-                <span className="ml-1 text-xs px-2 py-0.5 rounded bg-[#d1fae5]" style={{ backgroundColor: '#d1fae5', color: '#059669', fontWeight: 600, border: '1px solid #6ee7b7', minWidth: 90, display: 'inline-block', textAlign: 'center' }}>
-                  CONNECTED!
-                </span>
-              ) : (
-                <SpotifyStatusBanner spotifyConnected={spotifyConnected} loading={loading} onConnect={() => window.location.href='/api/spotify/login'} />
-              )}
+              <SpotifyStatusBanner spotifyConnected={spotifyConnected} loading={loading} onConnect={() => window.location.href='/api/spotify/login'} />
             </div>
             {/* Apple Music Placeholder */}
             <div className="flex items-center space-x-2">
@@ -581,75 +569,42 @@ export default function Home() {
           </div>
         </CardContent>
       </Card>
-      <Card className="w-full max-w-md p-4 rounded-lg shadow-md bg-secondary mt-4">
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold flex justify-center items-center text-center w-full">
-            <span role="img" aria-label="music">🎵</span>
-            <span className="mx-2">TuneFlow</span>
-            <span role="img" aria-label="sparkles">✨</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <YouTubeInputForm
-            youtubeLink={youtubeLink}
-            setYoutubeLink={setYoutubeLink}
-            inputMode={inputMode}
-            setInputMode={setInputMode}
-            scanComments={scanComments}
-            setScanComments={setScanComments}
-            scanDescription={scanDescription}
-            setScanDescription={setScanDescription}
-            scanChapters={scanChapters}
-            setScanChapters={setScanChapters}
-            prioritizePinned={prioritizePinned}
-            setPrioritizePinned={setPrioritizePinned}
-            loading={loading}
-            onParse={handleParseComments}
-          />
-        </CardContent>
-      </Card>
-      {/* Break between YouTubeInputForm and Parsed Songs */}
-      <div className="my-6 w-full flex justify-center">
-        <hr className="w-full max-w-md border-t-2 border-gray-200" />
-      </div>
-      {/* Playlist Creation Forms - now positioned left and right of parsed songs */}
+      {/* YouTube Input Form and Parsed Songs Side-by-Side, Centered and Equal Height */}
       <div className="w-full flex flex-col items-center">
-        <div className="flex flex-row w-full max-w-5xl justify-center items-start space-x-8 mt-8">
-          {/* YouTube Playlist Box - Left */}
-          <div className="flex-1 flex justify-end">
-            <PlaylistCreateForm
-              songs={songs}
-              service="youtube"
-              playlistName={playlistName}
-              setPlaylistName={setPlaylistName}
-              useAiPlaylistName={useAiPlaylistName}
-              setUseAiPlaylistName={setUseAiPlaylistName}
-              connected={youtubeConnected}
-              youtubeLink={youtubeLink}
-              onSuccess={(url) => {
-                toast({
-                  title: 'YouTube Playlist Created!',
-                  description: (
-                    <span>
-                      Playlist created successfully!{' '}
-                      {url && (
-                        <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#ef4444', fontWeight: 'bold', textDecoration: 'underline' }}>
-                          Open Playlist
-                        </a>
-                      )}
-                    </span>
-                  ),
-                  variant: 'default',
-                  duration: 10000,
-                  position: 'top-right',
-                });
-              }}
-              onError={(err) => toast({ title: 'YouTube Playlist Error', description: err, variant: 'destructive', position: 'top-left' })}
-            />
+        <div className="flex flex-row w-full max-w-5xl justify-center items-stretch gap-8 mt-4">
+          {/* YouTube Input Form Centered, Equal Height */}
+          <div className="flex-1 flex flex-col items-center justify-center">
+            <Card className="w-full max-w-md h-full min-h-[440px] p-4 rounded-lg shadow-md bg-secondary flex flex-col">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold flex justify-center items-center text-center w-full">
+                  <span role="img" aria-label="music">🎵</span>
+                  <span className="mx-2">TuneFlow</span>
+                  <span role="img" aria-label="sparkles">✨</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex-1 flex flex-col justify-center">
+                <YouTubeInputForm
+                  youtubeLink={youtubeLink}
+                  setYoutubeLink={setYoutubeLink}
+                  inputMode={inputMode}
+                  setInputMode={setInputMode}
+                  scanComments={scanComments}
+                  setScanComments={setScanComments}
+                  scanDescription={scanDescription}
+                  setScanDescription={setScanDescription}
+                  scanChapters={scanChapters}
+                  setScanChapters={setScanChapters}
+                  prioritizePinned={prioritizePinned}
+                  setPrioritizePinned={setPrioritizePinned}
+                  loading={loading}
+                  onParse={handleParseComments}
+                />
+              </CardContent>
+            </Card>
           </div>
-          {/* Parsed Songs Center */}
-          <div className="flex-1 flex flex-col items-center">
-            <Card className="w-full max-w-md p-4 rounded-lg shadow-md bg-secondary">
+          {/* Parsed Songs Centered, Equal Height */}
+          <div className="flex-1 flex flex-col items-center justify-center">
+            <Card className="w-full max-w-md h-full min-h-[440px] p-4 rounded-lg shadow-md bg-secondary flex flex-col">
               <CardHeader className="flex flex-row items-start justify-between">
                 <CardTitle className="text-lg font-semibold">Parsed Songs ({songs.length})</CardTitle>
                 <Button
@@ -661,7 +616,7 @@ export default function Home() {
                   Clear
                 </Button>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex-1 flex flex-col justify-center">
                 <SongList
                   songs={songs}
                   onFail={(failedSong) => {
@@ -706,39 +661,80 @@ export default function Home() {
               </div>
             )}
           </div>
-          {/* Spotify Playlist Box - Right */}
-          <div className="flex-1 flex justify-start">
-            <PlaylistCreateForm
-              songs={songs}
-              service="spotify"
-              playlistName={playlistName}
-              setPlaylistName={setPlaylistName}
-              useAiPlaylistName={useAiPlaylistName}
-              setUseAiPlaylistName={setUseAiPlaylistName}
-              connected={!!spotifyConnected}
-              onSuccess={(url) => {
-                setSpotifyPlaylistUrl(url);
-                setSpotifyAllSongsFound(true); // Assume all found for now
-                toast({
-                  title: 'Spotify Playlist Created!',
-                  description: (
-                    <span>
-                      Playlist created successfully!{' '}
-                      {url && (
-                        <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#22c55e', fontWeight: 'bold', textDecoration: 'underline' }}>
-                          Open Playlist
-                        </a>
-                      )}
-                    </span>
-                  ),
-                  variant: 'default',
-                  duration: 10000,
-                  position: 'top-right',
-                });
-              }}
-              onError={(err) => toast({ title: 'Spotify Playlist Error', description: err, variant: 'destructive', position: 'top-left' })}
-            />
-          </div>
+        </div>
+      </div>
+      {/* Swipable Playlist Creation Cards (Tabs) Below */}
+      <div className="w-full flex flex-col items-center mt-8">
+        <div className="w-full max-w-md">
+          <Tabs defaultValue="youtube" className="w-full">
+            <TabsList className="w-full flex justify-between mb-4">
+              <TabsTrigger value="youtube" className="flex-1">YouTube Playlist</TabsTrigger>
+              <TabsTrigger value="spotify" className="flex-1">Spotify Playlist</TabsTrigger>
+            </TabsList>
+            <TabsContent value="youtube">
+              <PlaylistCreateForm
+                songs={songs}
+                service="youtube"
+                playlistName={playlistName}
+                setPlaylistName={setPlaylistName}
+                useAiPlaylistName={useAiPlaylistName}
+                setUseAiPlaylistName={setUseAiPlaylistName}
+                connected={youtubeConnected}
+                youtubeLink={youtubeLink}
+                onSuccess={(url) => {
+                  toast({
+                    title: 'YouTube Playlist Created!',
+                    description: (
+                      <span>
+                        Playlist created successfully!{' '}
+                        {url && (
+                          <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#ef4444', fontWeight: 'bold', textDecoration: 'underline' }}>
+                            Open Playlist
+                          </a>
+                        )}
+                      </span>
+                    ),
+                    variant: 'default',
+                    duration: 10000,
+                    position: 'top-right',
+                  });
+                }}
+                onError={(err) => toast({ title: 'YouTube Playlist Error', description: err, variant: 'destructive', position: 'top-left' })}
+              />
+            </TabsContent>
+            <TabsContent value="spotify">
+              <PlaylistCreateForm
+                songs={songs}
+                service="spotify"
+                playlistName={playlistName}
+                setPlaylistName={setPlaylistName}
+                useAiPlaylistName={useAiPlaylistName}
+                setUseAiPlaylistName={setUseAiPlaylistName}
+                connected={!!spotifyConnected}
+                onSuccess={(url) => {
+                  setSpotifyPlaylistUrl(url);
+                  setSpotifyAllSongsFound(true); // Assume all found for now
+                  toast({
+                    title: 'Spotify Playlist Created!',
+                    description: (
+                      <span>
+                        Playlist created successfully!{' '}
+                        {url && (
+                          <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#22c55e', fontWeight: 'bold', textDecoration: 'underline' }}>
+                            Open Playlist
+                          </a>
+                        )}
+                      </span>
+                    ),
+                    variant: 'default',
+                    duration: 10000,
+                    position: 'top-right',
+                  });
+                }}
+                onError={(err) => toast({ title: 'Spotify Playlist Error', description: err, variant: 'destructive', position: 'top-left' })}
+              />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
       {/* Footer */}

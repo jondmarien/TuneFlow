@@ -1,6 +1,7 @@
 import React from "react";
 import type { Song } from "@/types/tuneflow";
 import { SongItem } from "./SongItem";
+import { hashSong } from "@/utils/formatters";
 
 /**
  * SongList Component
@@ -12,7 +13,7 @@ export function SongList({ songs, onFail }: { songs: Song[]; onFail: (song: Song
   return (
     <ul className="space-y-2 max-h-60 overflow-y-auto">
       {songs.map((song) => (
-        <SongItem key={`${song.title}-${song.artist}`} song={song} onFail={onFail} />
+        <SongItem key={hashSong(song)} song={song} onFail={onFail} />
       ))}
     </ul>
   );
