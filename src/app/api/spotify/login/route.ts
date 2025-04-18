@@ -18,6 +18,11 @@ import { NextRequest, NextResponse } from 'next/server';
  * @returns NextResponse object (redirect)
  */
 export async function GET(req: NextRequest) {
+  // --- ENV CHECK ---
+  if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_REDIRECT_URI) {
+    console.error('[Spotify Login] Missing SPOTIFY_CLIENT_ID or SPOTIFY_REDIRECT_URI in environment variables.');
+    return NextResponse.json({ error: 'Spotify login misconfigured: missing environment variables.' }, { status: 500 });
+  }
   const params = new URLSearchParams({
     client_id: process.env.SPOTIFY_CLIENT_ID!,
     response_type: 'code',
