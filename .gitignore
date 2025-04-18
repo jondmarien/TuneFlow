@@ -37,12 +37,16 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-.genkit/*
-
+# environment variables
 .env
 .env.local
 .env.development
 .env.production
 .env.test
 
+# extra folders
 .vscode/
+.genkit/*
+
+# old page.tsx file
+page.tsx.old
