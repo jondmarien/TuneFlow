@@ -306,7 +306,7 @@ export default function Home() {
   // Fallback AI playlist name generation using YouTube title or a static name
   async function generateAiPlaylistName(songs: Song[]): Promise<string> {
     // Fallback: Use the YouTube video title or a static name
-    if (!songs.length) return "AI Playlist";
+    if (!songs.length) return "TuneFlow Playlist";
     // Try to fetch YouTube title for a more descriptive fallback
     // (Assume getYoutubeVideoId and fetchYoutubeTitle exist in the file)
     try {
@@ -315,8 +315,10 @@ export default function Home() {
         const ytTitle = await fetchYoutubeTitle(videoId);
         if (ytTitle) return ytTitle + " Playlist";
       }
-    } catch {}
-    return "AI Playlist";
+    } catch (err) {
+      console.error('generateAiPlaylistName: Error fetching YouTube title', err);
+    }
+    return "TuneFlow Playlist";
   }
 
   // Helper to search Spotify for a track URI
@@ -515,9 +517,15 @@ export default function Home() {
         const videoId = getYoutubeVideoId(youtubeLink);
         if (videoId) {
           const ytTitle = await fetchYoutubeTitle(videoId);
-          finalPlaylistName = ytTitle ? ytTitle : `YouTube Playlist`;
+          if (ytTitle) {
+            finalPlaylistName = ytTitle;
+          } else {
+            toast({ title: 'YouTube Title Error', description: 'Could not fetch YouTube video title. Using fallback name.', variant: 'destructive', position: 'top-left' });
+            finalPlaylistName = 'TuneFlow Playlist';
+          }
         } else {
-          finalPlaylistName = `YouTube Playlist`;
+          toast({ title: 'YouTube Link Error', description: 'Could not extract video ID from YouTube link. Using fallback name.', variant: 'destructive', position: 'top-left' });
+          finalPlaylistName = 'TuneFlow Playlist';
         }
       } else {
         // Use AI-generated name, but fail if genres can't be fetched
@@ -619,13 +627,13 @@ export default function Home() {
           duration: 1000000,
           position: 'top-right',
         });
-        console.log(`Successfully created playlist ID: ${createData.playlistId}`);
+        console.log(`Successfully created playlist '${finalPlaylistName}' with ${trackUris.length} tracks. Spotify URL:`, createData.playlistUrl);
         if (createData.playlistUrl) {
           console.log('Playlist URL:', createData.playlistUrl);
         }
       }
-    } catch (error: any) {
-      if (error.name === 'AbortError' || error.message === 'Playlist creation stopped by user.') {
+    } catch (err: any) {
+      if (err.name === 'AbortError' || err.message === 'Playlist creation stopped by user.') {
         toast({
           title: 'Playlist Creation Stopped',
           description: 'Playlist creation was aborted by the user.',
@@ -633,14 +641,18 @@ export default function Home() {
           position: 'top-left',
         });
       } else {
-        console.error("Error during handleCreatePlaylist:", error);
-        toast({
-          title: "Playlist Creation Failed",
-          description: error.message || "An unexpected error occurred.",
-          variant: "destructive",
-          position: 'top-left',
-        });
+        console.error("Error during handleCreatePlaylist:", err);
+        return;
       }
+      setLoading(false);
+      setParsingState(null);
+      toast({
+        title: 'Playlist Creation Error',
+        description: err.message || 'Could not create Spotify playlist.',
+        variant: 'destructive',
+        position: 'top-left',
+      });
+      console.error('Playlist Creation Error:', err);
     } finally {
       setLoading(false);
       setParsingState(null);
