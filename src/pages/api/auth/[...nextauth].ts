@@ -15,11 +15,9 @@ export const authOptions: NextAuthOptions = {
             "email",
             "profile",
             "https://www.googleapis.com/auth/youtube.force-ssl",
-            "https://www.googleapis.com/auth/youtube.readonly",
-            "https://www.googleapis.com/auth/youtube.upload",
-            "https://www.googleapis.com/auth/youtube.channel-memberships.creator",
-            "https://www.googleapis.com/auth/youtubepartner",
           ].join(" "),
+          include_granted_scopes: "true",
+          prompt: "consent", // optional, for always showing the consent screen
         },
       },
     }),
