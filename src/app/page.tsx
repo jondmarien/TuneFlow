@@ -9,7 +9,7 @@
  */
 
 // --- Imports ---
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -591,6 +591,17 @@ export default function Home() {
   // Collect failed Spotify songs (from search state)
   const failedSpotifySongs = spotifySongSearches.filter(s => s.status === 'not_found').map(s => s.song);
 
+  // Deduplicate failedAlbumArtSongs by title+artist for debug log only
+  const dedupedFailedAlbumArtSongs = useMemo(() => {
+    const seen = new Set<string>();
+    return failedAlbumArtSongs.filter(song => {
+      const key = `${song.title}|${song.artist}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [failedAlbumArtSongs]);
+
   // --- UI Rendering ---
   // --- Hash helper for unique song keys ---
   function hashSong(song: Song): string {
@@ -861,9 +872,9 @@ export default function Home() {
             </button>
             {showDebugLog && (
               <div className="w-full max-w-2xl p-4 bg-gray-100 rounded shadow text-xs text-left">
-                <div className="mb-2 font-bold">Failed Album Art Songs ({failedAlbumArtSongs.length}):</div>
+                <div className="mb-2 font-bold">Failed Album Art Songs ({dedupedFailedAlbumArtSongs.length}):</div>
                 <ul className="mb-4 ml-4 list-disc">
-                  {failedAlbumArtSongs.length === 0 ? <li>None</li> : failedAlbumArtSongs.map((song, idx) => (
+                  {dedupedFailedAlbumArtSongs.length === 0 ? <li>None</li> : dedupedFailedAlbumArtSongs.map((song, idx) => (
                     <li key={`fail-art-${idx}`}>{song.title} – {song.artist}</li>
                   ))}
                 </ul>
