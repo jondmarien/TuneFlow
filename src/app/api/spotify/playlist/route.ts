@@ -11,6 +11,7 @@
  *   - userId: string (required)
  *   - playlistName: string (required)
  *   - trackUris: string[] (required)
+ *   - public: boolean (optional, defaults to true)
  *
  * Returns JSON with:
  *   - playlistId: string
@@ -40,12 +41,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Parse request body
-  let userId, playlistName, trackUris;
+  let userId, playlistName, trackUris, isPublic;
   try {
     const body = await req.json();
     userId = body.userId;
     playlistName = body.playlistName;
     trackUris = body.trackUris;
+    isPublic = typeof body.public === 'boolean' ? body.public : true;
   } catch (err) {
     return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
   }
@@ -67,7 +69,7 @@ export async function POST(req: NextRequest) {
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ name: playlistName, public: true, description: 'Created by TuneFlow. With <3 from Jon. https://tuneflow.chron0.tech' }),
+    body: JSON.stringify({ name: playlistName, public: isPublic, description: 'Created by TuneFlow. With <3 from Jon. https://tuneflow.chron0.tech' }),
   });
 
   // Parse create playlist response

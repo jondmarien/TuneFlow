@@ -54,6 +54,7 @@ export function PlaylistCreateForm({
   const [abortPlaylist, setAbortPlaylist] = useState(false);
   const [playlistAbortController, setPlaylistAbortController] = useState<AbortController | null>(null);
   const [failedSpotifySongs, setFailedSpotifySongs] = useState<Song[]>([]);
+  const [privacy, setPrivacy] = useState<'public' | 'private'>('public');
 
   // Helper to extract YouTube video ID (robust)
   function getYoutubeVideoId(url: string): string | null {
@@ -252,6 +253,7 @@ export function PlaylistCreateForm({
             userId: userData.id,
             playlistName: finalPlaylistName,
             trackUris,
+            public: privacy === 'public',
           }),
           signal: abortController.signal,
         });
@@ -354,6 +356,7 @@ export function PlaylistCreateForm({
           playlistName: playlistName,
           description: `Created with TuneFlow from YouTube comments`,
           videoIds: videoIds.length > 0 ? videoIds : undefined,
+          privacyStatus: privacy,
         }),
       });
       const data = await res.json();
@@ -429,6 +432,34 @@ export function PlaylistCreateForm({
           setUseAiPlaylistName={setUseAiPlaylistName}
           disabled={loading}
         />
+        {/* Playlist privacy radio group */}
+        <div className="flex flex-col gap-2 my-4 items-center">
+          <label className="font-medium">Playlist Privacy:</label>
+          <div className="flex gap-4 justify-center">
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="playlist-privacy"
+                value="public"
+                checked={privacy === 'public'}
+                onChange={() => setPrivacy('public')}
+                disabled={loading}
+              />
+              Public
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="playlist-privacy"
+                value="private"
+                checked={privacy === 'private'}
+                onChange={() => setPrivacy('private')}
+                disabled={loading}
+              />
+              Private
+            </label>
+          </div>
+        </div>
         <Button
           className="mt-4 w-full"
           onClick={handleCreatePlaylist}

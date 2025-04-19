@@ -9,6 +9,7 @@
  *   - playlistName: string (required)
  *   - description: string (optional)
  *   - videoIds: string[] (optional, to add to playlist)
+ *   - privacyStatus: string (optional, default: 'public')
  *
  * Returns JSON with:
  *   - playlistId: string
@@ -23,7 +24,7 @@ import { authOptions } from '../../../../pages/api/auth/[...nextauth]';
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  const { playlistName, description, videoIds } = await req.json();
+  const { playlistName, description, videoIds, privacyStatus } = await req.json();
 
   if (!session || !(session as any).accessToken) {
     return NextResponse.json({ error: 'Not authenticated with YouTube.' }, { status: 401 });
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
       title: playlistName || 'TuneFlow Playlist',
       description: 'Created by TuneFlow. With 💜 from Jon. https://tuneflow.chron0.tech'
     },
-    status: { privacyStatus: 'public' }
+    status: { privacyStatus: privacyStatus || 'public' }
   };
   console.log('YouTube playlist creation payload (production):', playlistPayload);
 
