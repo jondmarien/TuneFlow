@@ -368,6 +368,47 @@ export default function Home() {
     return null;
   }
 
+  // --- Overwrite N/A artist in parsed songs list when found on Spotify ---
+  useEffect(() => {
+    // Only run if we have search results
+    if (!spotifySongSearches || spotifySongSearches.length === 0) return;
+    let updated = false;
+    const newSongs = songs.map((song) => {
+      // Only update if artist is N/A or blank
+      if (!song.artist || song.artist === 'N/A') {
+        // Find a Spotify search result for this song (by title, optionally videoId)
+        const found = spotifySongSearches.find(
+          s =>
+            s.status === 'found' &&
+            s.song.title === song.title &&
+            (song.videoId ? s.song.videoId === song.videoId : true) &&
+            s.song.artist && s.song.artist !== 'N/A'
+        );
+        if (found) {
+          updated = true;
+          return { ...song, artist: found.song.artist };
+        }
+      }
+      return song;
+    });
+    if (updated) {
+      setSongs(newSongs);
+      // Update sessionStorage
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem('parsedSongs', JSON.stringify(newSongs));
+      }
+      // Update Redis cache on backend (if videoId is available)
+      const videoId = getYoutubeVideoId(youtubeLink);
+      if (videoId) {
+        fetch('/api/update-parsed-songs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId, songs: newSongs })
+        });
+      }
+    }
+  }, [spotifySongSearches, songs, youtubeLink]);
+
   // --- Handlers ---
 
   const handleParseComments = async (opts?: { fetchMoreComments?: boolean }) => {
@@ -544,6 +585,12 @@ export default function Home() {
     }
   }
 
+  // --- Debug Log Section: List all failed album art and failed Spotify songs ---
+  const [showDebugLog, setShowDebugLog] = useState(false);
+
+  // Collect failed Spotify songs (from search state)
+  const failedSpotifySongs = spotifySongSearches.filter(s => s.status === 'not_found').map(s => s.song);
+
   // --- UI Rendering ---
   // --- Hash helper for unique song keys ---
   function hashSong(song: Song): string {
@@ -557,6 +604,26 @@ export default function Home() {
     }
     return 'song-' + Math.abs(hash).toString(36);
   }
+
+  // --- Clean up failedAlbumArtSongs if imageUrl appears in songs ---
+  useEffect(() => {
+    if (!mounted) return;
+    if (failedAlbumArtSongs.length === 0) return;
+    const cleaned = failedAlbumArtSongs.filter(
+      failedSong => {
+        const found = songs.find(
+          s => s.title === failedSong.title && s.artist === failedSong.artist && s.imageUrl
+        );
+        return !found;
+      }
+    );
+    if (cleaned.length !== failedAlbumArtSongs.length) {
+      setFailedAlbumArtSongs(cleaned);
+    }
+  }, [songs, failedAlbumArtSongs, mounted]);
+
+  const parsedSongsWithAlbumArt = songs.filter(song => !!song.imageUrl);
+  const hasFailedAlbumArt = failedAlbumArtSongs.length > 0;
 
   return (
     <>
@@ -597,10 +664,10 @@ export default function Home() {
           </Card>
           {/* YouTube Input Form and Parsed Songs Side-by-Side, Centered and Equal Height */}
           <div className="w-full flex flex-col items-center">
-            <div className={`flex w-full max-w-5xl justify-center items-stretch gap-8 mt-4 ${songs.length === 0 && failedAlbumArtSongs.length === 0 ? 'min-h-[440px]' : ''}`}
+            <div className={`flex w-full max-w-5xl justify-center items-stretch gap-8 mt-4 ${songs.length === 0 && !hasFailedAlbumArt ? 'min-h-[440px]' : ''}`}
             >
               {/* Grouped Section: If no songs, center YouTubeInputForm. If songs, show all three in a row */}
-              {songs.length === 0 && failedAlbumArtSongs.length === 0 ? (
+              {songs.length === 0 && !hasFailedAlbumArt ? (
                 <div className="flex-1 flex flex-col items-center justify-center">
                   <Card className="w-full max-w-md h-full min-h-[440px] p-4 rounded-lg shadow-md bg-secondary flex flex-col justify-center">
                     <CardHeader>
@@ -631,7 +698,9 @@ export default function Home() {
                   </Card>
                 </div>
               ) : (
-                <div className="flex w-full max-w-6xl justify-center items-stretch gap-8 mt-4">
+                <div
+                  className={`flex w-full ${hasFailedAlbumArt ? 'max-w-6xl justify-center items-stretch gap-8' : 'max-w-3xl justify-center items-stretch gap-8'} mt-4`}
+                >
                   <div className="flex-1 flex flex-col items-center justify-center">
                     <Card className="w-full max-w-md h-full min-h-[440px] p-4 rounded-lg shadow-md bg-secondary flex flex-col">
                       <CardHeader>
@@ -663,7 +732,7 @@ export default function Home() {
                   </div>
                   <div className="flex-1 flex flex-col items-center justify-center">
                     <ParsedSongsList
-                      songs={songs}
+                      songs={parsedSongsWithAlbumArt}
                       onClear={handleClearParsed}
                       onFail={(failedSong) => {
                         setFailedAlbumArtSongs((prev) => {
@@ -674,9 +743,11 @@ export default function Home() {
                       failedAlbumArtSongs={failedAlbumArtSongs}
                     />
                   </div>
-                  <div className="flex-1 flex flex-col items-center justify-center">
-                    <FailedAlbumArtList failedAlbumArtSongs={failedAlbumArtSongs} />
-                  </div>
+                  {hasFailedAlbumArt && (
+                    <div className="flex-1 flex flex-col items-center justify-center">
+                      <FailedAlbumArtList failedAlbumArtSongs={failedAlbumArtSongs} />
+                    </div>
+                  )}
                 </div>
               )}
               {showMoreCommentsPrompt && (
@@ -778,6 +849,32 @@ export default function Home() {
                 )}
               </TabsContent>
             </Tabs>
+          </div>
+          {/* Debug Log Toggle and Content */}
+          <div className="w-full flex flex-col items-center mt-6">
+            <button
+              className="mb-2 px-4 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold text-xs"
+              onClick={() => setShowDebugLog(v => !v)}
+              style={{ width: 180 }}
+            >
+              {showDebugLog ? 'Hide' : 'Show'} Debug Log
+            </button>
+            {showDebugLog && (
+              <div className="w-full max-w-2xl p-4 bg-gray-100 rounded shadow text-xs text-left">
+                <div className="mb-2 font-bold">Failed Album Art Songs ({failedAlbumArtSongs.length}):</div>
+                <ul className="mb-4 ml-4 list-disc">
+                  {failedAlbumArtSongs.length === 0 ? <li>None</li> : failedAlbumArtSongs.map((song, idx) => (
+                    <li key={`fail-art-${idx}`}>{song.title} – {song.artist}</li>
+                  ))}
+                </ul>
+                <div className="mb-2 font-bold">Failed Spotify Songs ({failedSpotifySongs.length}):</div>
+                <ul className="ml-4 list-disc">
+                  {failedSpotifySongs.length === 0 ? <li>None</li> : failedSpotifySongs.map((song, idx) => (
+                    <li key={`fail-spotify-${idx}`}>{song.title} – {song.artist}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
           {/* Footer */}
           <footer className="w-full max-w-md mx-auto mt-12 mb-4 text-center text-xs text-foreground">
