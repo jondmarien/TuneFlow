@@ -253,7 +253,7 @@ export function PlaylistCreateForm({
             userId: userData.id,
             playlistName: finalPlaylistName,
             trackUris,
-            public: privacy === 'public',
+            public: privacy === 'public', // <-- wire to UI
           }),
           signal: abortController.signal,
         });
@@ -444,6 +444,7 @@ export function PlaylistCreateForm({
                 checked={privacy === 'public'}
                 onChange={() => setPrivacy('public')}
                 disabled={loading}
+                aria-label="Set playlist public"
               />
               Public
             </label>
@@ -455,10 +456,17 @@ export function PlaylistCreateForm({
                 checked={privacy === 'private'}
                 onChange={() => setPrivacy('private')}
                 disabled={loading}
+                aria-label="Set playlist private"
               />
               Private
             </label>
           </div>
+          {/* Privacy info */}
+          <span className="text-xs text-muted-foreground mt-1">
+            {privacy === 'public'
+              ? 'Anyone with the link can view this playlist.'
+              : 'Only you can view this playlist.'}
+          </span>
         </div>
         <Button
           className="mt-4 w-full"
