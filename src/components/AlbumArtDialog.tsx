@@ -31,7 +31,7 @@ export async function fetchFallbackAlbumArt(song: { title: string; artist: strin
           const caaData = await caaRes.json();
           if (caaData.images && caaData.images.length > 0) {
             // Prefer front image thumbnail, fallback to first image
-            const front = caaData.images.find((img: any) => img.front) || caaData.images[0];
+            const front = caaData.images.find((img: { front?: boolean; thumbnails?: { [key: string]: string }; image?: string }) => img.front) || caaData.images[0];
             if (front.thumbnails && front.thumbnails["500"]) return front.thumbnails["500"];
             if (front.thumbnails && front.thumbnails["250"]) return front.thumbnails["250"];
             if (front.image) return front.image;

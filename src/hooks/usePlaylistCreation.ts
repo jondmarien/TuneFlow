@@ -48,8 +48,12 @@ export function usePlaylistCreation() {
         setError(data.error || 'Failed to create playlist');
         setStatus('error');
       }
-    } catch (err: any) {
-      setError(err.message || 'Unknown error');
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Unknown error');
+      }
       setStatus('error');
     }
   }, []);

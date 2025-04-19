@@ -142,13 +142,14 @@ export function PlaylistCreateForm({
           if (data.track.name.toLowerCase().includes(cleanTitle) || data.track.name.toLowerCase().includes(song.title.toLowerCase())) {
             return data.track.uri;
           }
-          if (data.track.artists && data.track.artists.some((a: any) => a.name.toLowerCase().includes(song.artist.toLowerCase()))) {
+          if (data.track.artists && data.track.artists.some((a: { name: string }) => a.name.toLowerCase().includes(song.artist.toLowerCase()))) {
             return data.track.uri;
           }
           return data.track.uri;
         }
-      } catch (err: any) {
-        if (err.name === 'AbortError') return null;
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') return null;
+        // Optionally handle/log other error types
       }
     }
     return null;
@@ -288,7 +289,7 @@ export function PlaylistCreateForm({
             // createData.addedTracks should be an array of objects or strings with title/artist info
             setFailedSpotifySongs(failedSongs.filter(song => {
               // Check if song is not in the addedTracks list
-              return !createData.addedTracks.some((added: any) => {
+              return !createData.addedTracks.some((added: { uri: string; title?: string; artist?: string }) => {
                 // Fuzzy match by title and artist
                 return (
                   (added.title && added.title.toLowerCase() === song.title.toLowerCase()) &&
@@ -310,19 +311,19 @@ export function PlaylistCreateForm({
           });
           onSuccess?.(createData.playlistUrl);
         }
-      } catch (err: any) {
-        setSpotifySearchStatus('idle');
-        setCurrentSpotifySearchSong(null);
-        setSpotifyPlaylistUrl(null);
-        setSpotifyAllSongsFound(null);
-        if (err.name === 'AbortError' || err.message === 'Playlist creation stopped by user.') {
+      } catch (err: unknown) {
+        if (err instanceof Error && (err.name === 'AbortError' || err.message === 'Playlist creation stopped by user.')) {
           toast({
             title: 'Playlist Creation Stopped',
             description: 'Playlist creation was aborted by the user.',
             variant: 'destructive',
             position: 'top-left',
           });
-        } else {
+        } else if (err instanceof Error) {
+          setSpotifySearchStatus('idle');
+          setCurrentSpotifySearchSong(null);
+          setSpotifyPlaylistUrl(null);
+          setSpotifyAllSongsFound(null);
           toast({
             title: "Playlist Creation Error",
             description: err.message || `Could not create Spotify playlist.`,
@@ -330,7 +331,8 @@ export function PlaylistCreateForm({
             position: "top-left",
           });
         }
-        onError?.(err.message || "Playlist creation error");
+        // Optionally handle/log other error types
+        onError?.(err instanceof Error ? err.message : "Playlist creation error");
       } finally {
         setLoading(false);
         setSpotifySearchStatus('idle');

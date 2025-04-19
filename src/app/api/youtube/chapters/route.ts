@@ -82,7 +82,7 @@ function parseChaptersFromDescription(description: string) {
  */
 export async function POST(req: NextRequest) {
   try {
-    const { videoId: inputId, youtubeUrl } = await req.json();
+    const { videoId: inputId, youtubeUrl } = (await req.json()) as { videoId: string, youtubeUrl: string };
     const videoId = extractVideoId(inputId || youtubeUrl);
     if (!videoId) return NextResponse.json({ error: 'Invalid video ID or URL.' }, { status: 400 });
 

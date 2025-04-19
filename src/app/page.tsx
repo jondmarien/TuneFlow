@@ -9,7 +9,7 @@
  */
 
 // --- Imports ---
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -245,10 +245,10 @@ export default function Home() {
       }
       const data = await res.json();
       return data.genres || [];
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast({
         title: 'Spotify Categories Error',
-        description: err.message || 'Could not fetch categories from Spotify.',
+        description: (err as Error).message || 'Could not fetch categories from Spotify.',
         variant: 'destructive',
         position: 'top-left',
       });
@@ -305,11 +305,11 @@ export default function Home() {
       }
       const data = await res.json();
       return data.track?.uri || null;
-    } catch (err: any) {
-      if (err.name === 'AbortError') return null;
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return null;
       toast({
         title: 'Spotify Search Error',
-        description: err.message || 'Could not search for song on Spotify.',
+        description: (err as Error).message || 'Could not search for song on Spotify.',
         variant: 'destructive',
         position: 'top-left',
       });
@@ -355,14 +355,14 @@ export default function Home() {
             return data.track.uri;
           }
           // Accept if artist matches
-          if (data.track.artists && data.track.artists.some((a: any) => a.name.toLowerCase().includes(song.artist.toLowerCase()))) {
+          if (data.track.artists && data.track.artists.some((a: { name: string }) => a.name.toLowerCase().includes(song.artist.toLowerCase()))) {
             return data.track.uri;
           }
           // As fallback, just return the found URI
           return data.track.uri;
         }
-      } catch (err: any) {
-        if (err.name === 'AbortError') return null;
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') return null;
       }
     }
     return null;
@@ -461,12 +461,12 @@ export default function Home() {
         if (!resp.ok) throw new Error(data.error || 'Failed to fetch chapters');
         if (!data.chapters?.length) throw new Error('No chapters found in this video.');
         // Compose a string of all chapter titles for AI
-        const chapterText = data.chapters.map((ch: any) => `${ch.start} ${ch.title}`).join('\n');
+        const chapterText = data.chapters.map((ch: { start: string; title: string }) => `${ch.start} ${ch.title}`).join('\n');
         setParsingState("Processing Chapters with AI");
         const aiResult: ParseYouTubeCommentOutput = await parseYouTubeComment({ youtubeUrl: actualYoutubeUrl, prioritizePinnedComments: prioritizePinned, scanDescription: false, chapters: chapterText });
         allSongs = allSongs.concat(aiResult.songs.map(song => ({ ...song, imageUrl: song.imageUrl ?? undefined })));
-      } catch (err: any) {
-        errors.push('Chapters extraction failed: ' + (err.message || String(err)));
+      } catch (err: unknown) {
+        errors.push('Chapters extraction failed: ' + (err as Error).message || String(err));
       }
     }
 
@@ -487,8 +487,8 @@ export default function Home() {
         } else {
           errors.push('No description found in this video.');
         }
-      } catch (err: any) {
-        errors.push('Description extraction failed: ' + (err.message || String(err)));
+      } catch (err: unknown) {
+        errors.push('Description extraction failed: ' + (err as Error).message || String(err));
       }
     }
 
@@ -517,8 +517,8 @@ export default function Home() {
         } else {
           setShowMoreCommentsPrompt(false);
         }
-      } catch (err: any) {
-        errors.push('Comments extraction failed: ' + (err.message || String(err)));
+      } catch (err: unknown) {
+        errors.push('Comments extraction failed: ' + (err as Error).message || String(err));
       }
     }
 
@@ -590,6 +590,17 @@ export default function Home() {
 
   // Collect failed Spotify songs (from search state)
   const failedSpotifySongs = spotifySongSearches.filter(s => s.status === 'not_found').map(s => s.song);
+
+  // Deduplicate failedAlbumArtSongs by title+artist
+  const dedupedFailedAlbumArtSongs = useMemo(() => {
+    const seen = new Set<string>();
+    return failedAlbumArtSongs.filter(song => {
+      const key = `${song.title}|${song.artist}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [failedAlbumArtSongs]);
 
   // --- UI Rendering ---
   // --- Hash helper for unique song keys ---
@@ -861,9 +872,9 @@ export default function Home() {
             </button>
             {showDebugLog && (
               <div className="w-full max-w-2xl p-4 bg-gray-100 rounded shadow text-xs text-left">
-                <div className="mb-2 font-bold">Failed Album Art Songs ({failedAlbumArtSongs.length}):</div>
+                <div className="mb-2 font-bold">Failed Album Art Songs ({dedupedFailedAlbumArtSongs.length}):</div>
                 <ul className="mb-4 ml-4 list-disc">
-                  {failedAlbumArtSongs.length === 0 ? <li>None</li> : failedAlbumArtSongs.map((song, idx) => (
+                  {dedupedFailedAlbumArtSongs.length === 0 ? <li>None</li> : dedupedFailedAlbumArtSongs.map((song, idx) => (
                     <li key={`fail-art-${idx}`}>{song.title} – {song.artist}</li>
                   ))}
                 </ul>

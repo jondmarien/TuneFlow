@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: 'No cache entry found for the provided key.' }, { status: 404 });
     }
     return NextResponse.json({ message: 'Failed songs cache cleared successfully.' });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Internal server error.' }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Internal server error.' }, { status: 500 });
   }
 }

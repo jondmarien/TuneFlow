@@ -33,7 +33,7 @@ const youtube = google.youtube({
  */
 export async function POST(req: Request) {
   try {
-    const { videoId, prioritizePinnedComments } = await req.json();
+    const { videoId, prioritizePinnedComments } = (await req.json()) as { videoId: string, prioritizePinnedComments: boolean };
 
     if (!videoId) {
       return NextResponse.json({ error: 'Video ID is required' }, { status: 400 });

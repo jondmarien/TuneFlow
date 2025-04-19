@@ -9,7 +9,6 @@
 
 // --- Batching and Prompt Length Constants ---
 const MAX_PROMPT_LENGTH = 2048; // Truncate input text above this length
-const BATCH_SIZE = 5; // How many comments to batch per AI call
 
 import {ai} from '@/ai/ai-instance';
 import {z} from 'genkit';
@@ -130,7 +129,7 @@ const parseYouTubeCommentFlow = ai.defineFlow<
     outputSchema: ParseYouTubeCommentOutputSchema,
   },
   async input => {
-    let commentsData: any[] = []; // Store raw comment items from API
+    const commentsData: { text: string }[] = []; // Store raw comment items from API
     let descriptionText = '';
 
     // Construct the absolute URL for the internal API route
@@ -171,7 +170,7 @@ const parseYouTubeCommentFlow = ai.defineFlow<
       // Return early if chapters were processed
       const songsWithImages = await Promise.all(chapterSongs.map(async (song: { title: string; artist: string }) => {
         const key = `albumArt:${song.title}|||${song.artist}`;
-        let imageUrl: string | null = await redis.get(key);
+        const imageUrl: string | null = await redis.get(key);
         if (!imageUrl) {
           getTrackAlbumArt(song.title, song.artist).then(url => {
             if (url) redis.set(key, url, 'EX', 60 * 60 * 24);
@@ -223,18 +222,16 @@ const parseYouTubeCommentFlow = ai.defineFlow<
         let data;
         try {
             data = JSON.parse(responseBody);
-        } catch (parseError) {
+        } catch (error) {
             console.error('[parseYouTubeCommentFlow] Failed to parse JSON response:', responseBody);
             throw new Error('Failed to parse response from backend API.');
         }
 
         console.log(`[parseYouTubeCommentFlow] Received ${data?.comments?.length || 0} comment items from API.`);
-        commentsData = data.comments || []; // Extract comment items
-        if (commentsData.length > 0) {
-          console.log('[parseYouTubeCommentFlow] Sample comments (first 5):');
-          commentsData.slice(0, 5).forEach((comment, index) => {
-            console.log(`Comment ${index + 1}:`, comment.text || 'No text available');
-          });
+        for (const item of data.comments) {
+          if (typeof item === 'object' && item !== null && 'text' in item && typeof (item as { text?: string }).text === 'string') {
+            commentsData.push({ text: (item as { text: string }).text });
+          }
         }
 
       } catch (error) {
@@ -256,8 +253,8 @@ const parseYouTubeCommentFlow = ai.defineFlow<
           if (descResponse.ok && descData.description) {
             descriptionText = descData.description;
           }
-        } catch (descErr) {
-          console.warn('[parseYouTubeCommentFlow] Could not fetch video description:', descErr);
+        } catch {
+          console.warn('[parseYouTubeCommentFlow] Could not fetch video description.');
         }
       }
     } else {
@@ -297,7 +294,7 @@ const parseYouTubeCommentFlow = ai.defineFlow<
 
     // --- Full-prompt batching: try to fit as many cleaned comments as possible in one prompt ---
     const commentTexts = commentsData.map(item => cleanComment(item.text)).filter(Boolean);
-    let batches: string[][] = [];
+    const batches: string[][] = [];
     let currentBatch: string[] = [];
     let currentLength = 0;
     for (const comment of commentTexts) {
@@ -331,8 +328,8 @@ const parseYouTubeCommentFlow = ai.defineFlow<
       let result;
       try {
         result = await parseCommentPrompt({ commentText: truncated });
-      } catch (error) {
-        console.error(`[parseYouTubeCommentFlow] Error in batch AI prompt:`, error);
+      } catch {
+        console.error(`[parseYouTubeCommentFlow] Error in batch AI prompt:`);
         return [];
       }
       const promptDuration = Date.now() - promptStart;
@@ -347,20 +344,20 @@ const parseYouTubeCommentFlow = ai.defineFlow<
       return [];
     }
 
-    let allSongs: { title: string; artist: string }[] = [];
+    const allSongs: { title: string; artist: string }[] = [];
 
     // --- Step 2: Full-prompt batching logic ---
     for (const batch of batches) {
       if (batch.length === 0) continue;
       try {
         const songs = await processCommentBatch(batch);
-        allSongs = allSongs.concat(songs);
+        allSongs.push(...songs);
         if (songs.length >= 5) {
           console.log(`[parseYouTubeCommentFlow] Detected a tracklist with ${songs.length} songs in batch. Stopping further comment processing.`);
           break;
         }
-      } catch (error) {
-        console.error(`[parseYouTubeCommentFlow] Error processing comment batch:`, error);
+      } catch {
+        console.error(`[parseYouTubeCommentFlow] Error processing comment batch:`);
       }
     }
 
@@ -391,10 +388,10 @@ const parseYouTubeCommentFlow = ai.defineFlow<
           await redis.set(hash, JSON.stringify({ songs: descSongs }), 'EX', 60 * 60 * 24);
         }
         if (descSongs.length > 0) {
-          allSongs = allSongs.concat(descSongs);
+          allSongs.push(...descSongs);
         }
-      } catch (error) {
-        console.error(`[parseYouTubeCommentFlow] Error processing description:`, error);
+      } catch {
+        console.error(`[parseYouTubeCommentFlow] Error processing description:`);
       }
     }
 
@@ -411,7 +408,7 @@ const parseYouTubeCommentFlow = ai.defineFlow<
     // Instead of waiting for album art, return songs with imageUrl: null, and trigger background fetch (pseudo, see below)
     const songsWithImages = await Promise.all(uniqueSongs.map(async (song: { title: string; artist: string }) => {
       const key = `albumArt:${song.title}|||${song.artist}`;
-      let imageUrl: string | null = await redis.get(key);
+      const imageUrl: string | null = await redis.get(key);
       if (!imageUrl) {
         // Fire and forget async fetch
         getTrackAlbumArt(song.title, song.artist).then(url => {

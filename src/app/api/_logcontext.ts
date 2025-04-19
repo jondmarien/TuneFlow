@@ -17,7 +17,7 @@ export const requestContextStorage = new AsyncLocalStorage<RequestContext>();
 
 // Patch global console.log to include IP if available, and replace with THEBEAST-PC if matches
 const originalLog = console.log;
-console.log = function (...args: any[]) {
+console.log = function (...args: Record<string, unknown>[]) {
   const store = requestContextStorage.getStore();
   let ip = store && store.ip ? store.ip : undefined;
   if (ip && MY_IPS.includes(ip)) {

@@ -41,15 +41,19 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, account }) {
       // Persist the OAuth access_token to the token right after signin
       if (account) {
-        token.accessToken = account.access_token;
-        token.idToken = account.id_token;
+        if (typeof account.access_token === 'string') {
+          token.accessToken = account.access_token;
+        }
+        if (typeof account.id_token === 'string') {
+          token.idToken = account.id_token;
+        }
       }
       return token;
     },
     async session({ session, token }) {
       // Send access_token to the client
-      (session as any).accessToken = token.accessToken;
-      (session as any).idToken = token.idToken;
+      (session as { accessToken?: string | undefined }).accessToken = typeof token.accessToken === 'string' ? token.accessToken : undefined;
+      (session as { idToken?: string | undefined }).idToken = typeof token.idToken === 'string' ? token.idToken : undefined;
       return session;
     },
   },

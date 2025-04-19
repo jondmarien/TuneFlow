@@ -1,11 +1,9 @@
-import type { Song } from "@/types/tuneflow";
-
 /**
  * Fetches YouTube comments, chapters, or description via backend API.
  * @param endpoint - 'comments' | 'chapters' | 'description'
  * @param payload - Request body
  */
-export async function fetchYouTubeData<T>(endpoint: 'comments' | 'chapters' | 'description', payload: any): Promise<T> {
+export async function fetchYouTubeData<T>(endpoint: 'comments' | 'chapters' | 'description', payload: Record<string, unknown>): Promise<T> {
   const resp = await fetch(`/api/youtube/${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -4,10 +4,9 @@ import type { Song } from "@/types/tuneflow";
  * Creates a Spotify playlist via backend API.
  * @param songs - Array of Song objects
  * @param playlistName - Name for the playlist
- * @param useAiName - Whether to use AI to generate the playlist name
  * @returns playlistUrl (string) if successful
  */
-export async function createSpotifyPlaylist(songs: Song[], playlistName: string, useAiName: boolean): Promise<string> {
+export async function createSpotifyPlaylist(songs: Song[], playlistName: string): Promise<string> {
   // Fetch Spotify user ID
   const userRes = await fetch("/api/spotify/me");
   const userData = await userRes.json();
@@ -63,13 +62,13 @@ export async function searchSpotifyTrackUri(song: Song, signal?: AbortSignal): P
         if (data.track.name.toLowerCase().includes(cleanTitle) || data.track.name.toLowerCase().includes(song.title.toLowerCase())) {
           return data.track.uri;
         }
-        if (data.track.artists && data.track.artists.some((a: any) => a.name.toLowerCase().includes(song.artist.toLowerCase()))) {
+        if (data.track.artists && data.track.artists.some((a: { name: string }) => a.name.toLowerCase().includes(song.artist.toLowerCase()))) {
           return data.track.uri;
         }
         return data.track.uri;
       }
-    } catch (err: any) {
-      if (err.name === 'AbortError') return null;
+    } catch {
+      return null;
     }
   }
   return null;

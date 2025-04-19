@@ -7,16 +7,29 @@ interface FailedAlbumArtListProps {
 }
 
 export const FailedAlbumArtList: React.FC<FailedAlbumArtListProps> = ({ failedAlbumArtSongs }) => {
-  if (failedAlbumArtSongs.length === 0) return null;
+  // Deduplicate by title+artist
+  const dedupedSongs = React.useMemo(() => {
+    const seen = new Set<string>();
+    return failedAlbumArtSongs.filter(song => {
+      const key = `${song.title}|${song.artist}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [failedAlbumArtSongs]);
+
+  if (dedupedSongs.length === 0) return null;
   return (
     <Card className="w-full max-w-md h-full min-h-[200px] p-4 rounded-lg shadow-md flex flex-col bg-yellow-100 border-yellow-400 dark:bg-yellow-950 dark:border-yellow-900">
       <CardHeader className="flex items-center justify-center px-6 pt-6">
-        <CardTitle className="text-lg font-semibold text-center w-full text-yellow-700 dark:text-yellow-200">Songs Failed to Find Album Art ({failedAlbumArtSongs.length})</CardTitle>
+        <CardTitle className="text-lg font-semibold text-center w-full text-yellow-700 dark:text-yellow-200">
+          Songs Failed to Find Album Art ({dedupedSongs.length})
+        </CardTitle>
       </CardHeader>
       <CardContent className="p-6 pt-0 flex-1 flex flex-col justify-center">
         <ul className="space-y-2 max-h-60 overflow-y-auto">
-          {failedAlbumArtSongs.map((song) => (
-            <li key={`fail-art-${song.title}|${song.artist}`} className="flex items-center text-sm border-b pb-1 bg-yellow-200/80 border-yellow-300 rounded dark:bg-yellow-900/70 dark:border-yellow-800 min-h-[40px]">
+          {dedupedSongs.map((song, idx) => (
+            <li key={`fail-art-${song.title}|${song.artist}|${idx}`} className="flex items-center text-sm border-b pb-1 bg-yellow-200/80 border-yellow-300 rounded dark:bg-yellow-900/70 dark:border-yellow-800 min-h-[40px]">
               <div className="w-10 h-10 flex items-center justify-center bg-yellow-300 rounded mr-3 border text-xs text-yellow-800 dark:bg-yellow-800 dark:text-yellow-200">
                 <span className="block w-full text-center">N/A</span>
               </div>

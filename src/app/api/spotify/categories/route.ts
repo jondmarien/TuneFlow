@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
     const data = await res.json();
 
     // Map categories to genre names
-    const genres = (data.categories?.items || []).map((item: any) => item.name);
+    const genres = (data.categories?.items || []).map((item: { id: string; name: string }) => item.name);
 
     // Return genre names
     return NextResponse.json({ genres });
