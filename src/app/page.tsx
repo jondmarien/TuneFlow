@@ -9,35 +9,31 @@
  */
 
 // --- Imports ---
-import { useState, useEffect, useMemo } from "react";
-import { Input } from "@/components/ui/input";
+// React/core
+import { useEffect, useMemo, useState } from "react";
+
+// Next.js authentication/session
+import { useSession } from "next-auth/react";
+
+// Project hooks
+import { useToast } from "@/hooks/use-toast";
+
+// Project UI components
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
-import { Icons } from "@/components/icons";
-import { parseYouTubeComment, ParseYouTubeCommentOutput } from "@/ai/flows/parse-youtube";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { signIn, signOut, useSession } from "next-auth/react";
-import type { Session } from "next-auth";
-import { hasAccessToken } from "@/utils/typeGuards";
-import { useAlbumArtWithFailure } from "@/hooks/useAlbumArtWithFailure";
-import { SongItem } from "@/components/SongItem";
-import { SongList } from "@/components/SongList";
-import { YouTubeInputForm } from "@/components/YouTubeInputForm";
-import { PlaylistNameForm } from "@/components/PlaylistNameForm";
-import { SpotifyStatusBanner } from "@/components/SpotifyStatusBanner";
-import { ErrorBanner } from "@/components/ErrorBanner";
-import { PaginationControls } from "@/components/PaginationControls";
-import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ConfirmationDialog } from "@/components/ConfirmationDialog";
-import { fetchFallbackAlbumArt, AlbumArtDialog as AlbumArtDialogComponent } from "@/components/AlbumArtDialog";
-import { PlaylistCreateForm } from "@/components/PlaylistCreateForm";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { YoutubeStatusBanner } from "@/components/YoutubeStatusBanner";
-import { ParsedSongsList } from "@/components/ParsedSongsList";
-import { FailedSongsList } from "@/components/FailedSongsList";
 import { FailedAlbumArtList } from "@/components/FailedAlbumArtList";
+import { Icons } from "@/components/icons";
+import { PaginationControls } from "@/components/PaginationControls";
+import { ParsedSongsList } from "@/components/ParsedSongsList";
+import { PlaylistCreateForm } from "@/components/PlaylistCreateForm";
+import { SpotifyStatusBanner } from "@/components/SpotifyStatusBanner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { YoutubeStatusBanner } from "@/components/YoutubeStatusBanner";
+import { YouTubeInputForm } from "@/components/YouTubeInputForm";
+
+// Utilities and type guards
+import { hasAccessToken } from "@/utils/typeGuards";
 
 // Define Song type locally or in a shared types file if needed elsewhere
 type Song = {
@@ -51,6 +47,9 @@ type Song = {
 const youtubeIcon = <Icons.youtube />;
 const spotifyIcon = <Icons.spotify />;
 const appleMusicIcon = <Icons.appleMusic />;
+
+// AI/logic flows
+import { parseYouTubeComment, ParseYouTubeCommentOutput } from "@/ai/flows/parse-youtube";
 
 // --- Main Component ---
 
