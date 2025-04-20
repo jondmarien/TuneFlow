@@ -27,6 +27,10 @@ const ParseYouTubeCommentInputSchema = z.object({
     .boolean()
     .default(false)
     .describe('Whether to scan the video description for song and artist info.'),
+  scanComments: z
+    .boolean()
+    .default(true)
+    .describe('Whether to scan the comments for song and artist info.'),
   chapters: z.string().optional().describe('Chapters text extracted from YouTube video, if available.'),
   comments: z.array(z.object({
     id: z.string().nullable().optional(),
@@ -350,17 +354,27 @@ const parseYouTubeCommentFlow = ai.defineFlow<
     let allSongs: { title: string; artist: string }[] = [];
 
     // --- Step 2: Full-prompt batching logic ---
-    for (const batch of batches) {
-      if (batch.length === 0) continue;
-      try {
-        const songs = await processCommentBatch(batch);
-        allSongs = allSongs.concat(songs);
-        if (songs.length >= 5) {
-          console.log(`[parseYouTubeCommentFlow] Detected a tracklist with ${songs.length} songs in batch. Stopping further comment processing.`);
-          break;
+    const scanComments = typeof input.scanComments === 'boolean' ? input.scanComments : true;
+    if (scanComments && commentsData.length > 0) {
+      for (const batch of batches) {
+        if (batch.length === 0) continue;
+        try {
+          let songs = await processCommentBatch(batch);
+          // Filter out invalid songs: artist and title must be strings
+          songs = songs
+            .filter(song => typeof song.title === 'string' && typeof song.artist === 'string')
+            .map(song => ({
+              ...song,
+              artist: typeof song.artist === 'string' ? song.artist : 'Unknown Artist',
+            }));
+          allSongs = allSongs.concat(songs);
+          if (songs.length >= 5) {
+            console.log(`[parseYouTubeCommentFlow] Detected a tracklist with ${songs.length} songs in batch. Stopping further comment processing.`);
+            break;
+          }
+        } catch (err) {
+          console.error('[parseYouTubeCommentFlow] Error processing comment batch:', err);
         }
-      } catch (error) {
-        console.error(`[parseYouTubeCommentFlow] Error processing comment batch:`, error);
       }
     }
 

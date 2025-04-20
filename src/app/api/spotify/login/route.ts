@@ -11,24 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-/**
- * Handles GET requests to the Spotify login API route.
- *
- * @param req - NextRequest object
- * @returns NextResponse object (redirect)
- */
-export async function GET(req: NextRequest) {
-  // --- ENV CHECK ---
-  if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_REDIRECT_URI) {
-    console.error('[Spotify Login] Missing SPOTIFY_CLIENT_ID or SPOTIFY_REDIRECT_URI in environment variables.');
-    return NextResponse.json({ error: 'Spotify login misconfigured: missing environment variables.' }, { status: 500 });
-  }
-  const params = new URLSearchParams({
-    client_id: process.env.SPOTIFY_CLIENT_ID!,
-    response_type: 'code',
-    redirect_uri: process.env.SPOTIFY_REDIRECT_URI!,
-    scope: 'playlist-modify-private playlist-modify-public',
-    show_dialog: 'true',
-  });
-  return NextResponse.redirect('https://accounts.spotify.com/authorize?' + params.toString());
+// DEPRECATED: This endpoint is no longer needed. Spotify PKCE flow is now handled entirely in the frontend via the SDK.
+export async function GET() {
+  return new Response(JSON.stringify({ error: 'DEPRECATED: Use frontend PKCE flow.' }), { status: 410, headers: { 'Content-Type': 'application/json' } });
 }

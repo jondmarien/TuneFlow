@@ -51,6 +51,84 @@ const appleMusicIcon = <Icons.appleMusic />;
 // AI/logic flows
 import { parseYouTubeComment, ParseYouTubeCommentOutput } from "@/ai/flows/parse-youtube";
 
+// --- Spotify SDK (PKCE Flow) ---
+import { SpotifyApi } from '@spotify/web-api-ts-sdk';
+
+const spotifySdk = SpotifyApi.withUserAuthorization(
+  process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID!,
+  process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI!,
+  [
+    'playlist-modify-public',
+    'playlist-modify-private',
+    // add any other scopes you need
+  ]
+);
+
+// Example: Creating a Spotify playlist with the SDK
+async function createSpotifyPlaylist(playlistName: string, trackUris: string[], isPublic: boolean = true) {
+  const user = await spotifySdk.currentUser.profile();
+  const playlist = await spotifySdk.playlists.createPlaylist(user.id, {
+    name: playlistName,
+    public: isPublic,
+    description: 'Created by TuneFlow. With <3 from Jon. https://tuneflow.chron0.tech',
+  });
+  await spotifySdk.playlists.addItemsToPlaylist(playlist.id, trackUris);
+  return {
+    playlistId: playlist.id,
+    playlistUrl: playlist.external_urls?.spotify,
+  };
+}
+
+// --- Spotify Track Search ---
+async function searchSpotifyTrackUri(song: Song): Promise<string | null> {
+  try {
+    const query = `${song.title} ${song.artist}`;
+    const items = await spotifySdk.search(query, ['track']);
+    if (!items.tracks.items.length) return null;
+    return items.tracks.items[0].uri;
+  } catch (err: any) {
+    console.error('searchSpotifyTrackUri: Error searching for song on Spotify', err);
+    return null;
+  }
+}
+
+// --- Robust Spotify Track Search ---
+async function robustSpotifyTrackSearch(song: Song): Promise<string | null> {
+  try {
+    // Try several search patterns
+    const baseQuery = `${song.title} ${song.artist}`;
+    const altQueries = [
+      baseQuery,
+      song.title,
+      `${song.title.replace(/\s*\([^)]*\)/g, '')} ${song.artist}`.trim(), // Remove parentheticals
+      `${song.title} (explicit) ${song.artist}`,
+      `${song.title} (with ${song.artist})`,
+      song.artist,
+    ];
+    for (const q of altQueries) {
+      try {
+        const items = await spotifySdk.search(q, ['track']);
+        if (!items.tracks.items.length) continue;
+        const track = items.tracks.items[0];
+        const cleanTitle = song.title.replace(/\s*\([^)]*\)/g, '').toLowerCase();
+        if (track.name.toLowerCase().includes(cleanTitle) || track.name.toLowerCase().includes(song.title.toLowerCase())) {
+          return track.uri;
+        }
+        if (track.artists && track.artists.some((a: any) => a.name.toLowerCase().includes(song.artist.toLowerCase()))) {
+          return track.uri;
+        }
+        return track.uri;
+      } catch (err: any) {
+        // continue to next query
+      }
+    }
+    return null;
+  } catch (err: any) {
+    console.error('robustSpotifyTrackSearch: Error searching for song on Spotify', err);
+    return null;
+  }
+}
+
 // --- Main Component ---
 
 /**
@@ -113,7 +191,6 @@ export default function Home() {
   const [scanDescription, setScanDescription] = useState(false);
   const [scanChapters, setScanChapters] = useState(false);
   const [scanComments, setScanComments] = useState(false);
-  const [spotifyConnected, setSpotifyConnected] = useState<boolean | null>(null);
   const { toast } = useToast();
   const [spotifyReady, setSpotifyReady] = useState(true); // Assume ready for basic search initially
   const [parsingState, setParsingState] = useState<string | null>(null); // More specific state tracking
@@ -144,50 +221,6 @@ export default function Home() {
   }, [selectedService, mounted]);
 
   // --- Effects ---
-
-  // Check Spotify connection
-  useEffect(() => {
-    fetch('/api/spotify/me')
-      .then(res => res.json())
-      .then(data => setSpotifyConnected(data.connected))
-      .catch(() => setSpotifyConnected(false));
-  }, []);
-
-  useEffect(() => {
-    // Check on mount
-    fetch('/api/spotify/me')
-      .then(res => res.json())
-      .then(data => setSpotifyConnected(data.connected))
-      .catch(() => setSpotifyConnected(false));
-
-    // Check every 5 minutes
-    const interval = setInterval(() => {
-      fetch('/api/spotify/me')
-        .then(res => res.json())
-        .then(data => {
-          if (!data.connected) {
-            setSpotifyConnected(false);
-            toast({
-              title: "Spotify Login Required",
-              description: "Your Spotify session has expired or is invalid. Please log in again.",
-              variant: "destructive",
-              position: "top-left"
-            });
-          }
-        })
-        .catch(() => {
-          setSpotifyConnected(false);
-          toast({
-            title: "Spotify Login Required",
-            description: "Could not verify your Spotify session. Please log in again.",
-            variant: "destructive",
-            position: "top-left"
-          });
-        });
-    }, 5 * 60 * 1000); // 5 minutes
-
-    return () => clearInterval(interval);
-  }, []);
 
   // Helper to extract YouTube video ID
   function getYoutubeVideoId(url: string): string | null {
@@ -228,33 +261,6 @@ export default function Home() {
     }
   }
 
-  // Fetch genres from Spotify API
-  async function fetchSpotifyGenres(): Promise<string[]> {
-    try {
-      const res = await fetch('/api/spotify/categories');
-      if (!res.ok) {
-        const data = await res.json();
-        toast({
-          title: 'Spotify Categories Error',
-          description: data.error || 'Could not fetch categories from Spotify.',
-          variant: 'destructive',
-          position: 'top-left',
-        });
-        return [];
-      }
-      const data = await res.json();
-      return data.genres || [];
-    } catch (err: any) {
-      toast({
-        title: 'Spotify Categories Error',
-        description: err.message || 'Could not fetch categories from Spotify.',
-        variant: 'destructive',
-        position: 'top-left',
-      });
-      return [];
-    }
-  }
-
   // Fallback AI playlist name generation using YouTube title or a static name
   async function generateAiPlaylistName(songs: Song[]): Promise<string> {
     // Fallback: Use the YouTube video title or a static name
@@ -274,97 +280,56 @@ export default function Home() {
   }
 
   // Helper to search Spotify for a track URI
-  async function searchSpotifyTrackUri(song: Song, signal?: AbortSignal): Promise<string | null> {
-    if (!spotifyConnected) {
-      toast({
-        title: 'Spotify Login Required',
-        description: 'Please connect your Spotify account before searching for songs.',
-        variant: 'destructive',
-        position: 'top-left',
-      });
-      return null;
-    }
+  async function searchSpotifyTrackUri(song: Song): Promise<string | null> {
     try {
       const query = `${song.title} ${song.artist}`;
-      const res = await fetch('/api/spotify/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q: query }),
-        signal,
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        toast({
-          title: 'Spotify Search Error',
-          description: data.error || 'Could not search for song on Spotify.',
-          variant: 'destructive',
-          position: 'top-left',
-        });
-        return null;
-      }
-      const data = await res.json();
-      return data.track?.uri || null;
+      const items = await spotifySdk.search(query, ['track']);
+      if (!items.tracks.items.length) return null;
+      return items.tracks.items[0].uri;
     } catch (err: any) {
-      if (err.name === 'AbortError') return null;
-      toast({
-        title: 'Spotify Search Error',
-        description: err.message || 'Could not search for song on Spotify.',
-        variant: 'destructive',
-        position: 'top-left',
-      });
+      console.error('searchSpotifyTrackUri: Error searching for song on Spotify', err);
       return null;
     }
   }
 
   // --- Improved Spotify Track Search ---
-  async function robustSpotifyTrackSearch(song: Song, signal?: AbortSignal): Promise<string | null> {
-    if (!spotifyConnected) {
-      toast({
-        title: 'Spotify Login Required',
-        description: 'Please connect your Spotify account before searching for songs.',
-        variant: 'destructive',
-        position: 'top-left',
-      });
-      return null;
-    }
-    // Try several search patterns
-    const baseQuery = `${song.title} ${song.artist}`;
-    const altQueries = [
-      baseQuery,
-      song.title,
-      `${song.title.replace(/\s*\([^)]*\)/g, '')} ${song.artist}`.trim(), // Remove parentheticals
-      `${song.title} (explicit) ${song.artist}`,
-      `${song.title} (with ${song.artist})`,
-      song.artist,
-    ];
-    for (const q of altQueries) {
-      try {
-        const res = await fetch('/api/spotify/search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ q }),
-          signal,
-        });
-        if (!res.ok) continue;
-        const data = await res.json();
-        if (data.track && data.track.uri) {
+  async function robustSpotifyTrackSearch(song: Song): Promise<string | null> {
+    try {
+      // Try several search patterns
+      const baseQuery = `${song.title} ${song.artist}`;
+      const altQueries = [
+        baseQuery,
+        song.title,
+        `${song.title.replace(/\s*\([^)]*\)/g, '')} ${song.artist}`.trim(), // Remove parentheticals
+        `${song.title} (explicit) ${song.artist}`,
+        `${song.title} (with ${song.artist})`,
+        song.artist,
+      ];
+      for (const q of altQueries) {
+        try {
+          const items = await spotifySdk.search(q, ['track']);
+          if (!items.tracks.items.length) continue;
+          const track = items.tracks.items[0];
           // Fuzzy match: check if track name contains original song title (case-insensitive, ignoring parentheticals)
           const cleanTitle = song.title.replace(/\s*\([^)]*\)/g, '').toLowerCase();
-          if (data.track.name.toLowerCase().includes(cleanTitle) || data.track.name.toLowerCase().includes(song.title.toLowerCase())) {
-            return data.track.uri;
+          if (track.name.toLowerCase().includes(cleanTitle) || track.name.toLowerCase().includes(song.title.toLowerCase())) {
+            return track.uri;
           }
           // Accept if artist matches
-          if (data.track.artists && data.track.artists.some((a: any) => a.name.toLowerCase().includes(song.artist.toLowerCase()))) {
-            return data.track.uri;
+          if (track.artists && track.artists.some((a: any) => a.name.toLowerCase().includes(song.artist.toLowerCase()))) {
+            return track.uri;
           }
           // As fallback, just return the found URI
-          return data.track.uri;
+          return track.uri;
+        } catch (err: any) {
+          // continue to next query
         }
-      } catch (err: any) {
-        if (err.name === 'AbortError') return null;
       }
+      return null;
+    } catch (err: any) {
+      console.error('robustSpotifyTrackSearch: Error searching for song on Spotify', err);
+      return null;
     }
-    return null;
   }
 
   // --- Overwrite N/A artist in parsed songs list when found on Spotify ---
@@ -462,7 +427,7 @@ export default function Home() {
         // Compose a string of all chapter titles for AI
         const chapterText = data.chapters.map((ch: any) => `${ch.start} ${ch.title}`).join('\n');
         setParsingState("Processing Chapters with AI");
-        const aiResult: ParseYouTubeCommentOutput = await parseYouTubeComment({ youtubeUrl: actualYoutubeUrl, prioritizePinnedComments: prioritizePinned, scanDescription: false, chapters: chapterText });
+        const aiResult: ParseYouTubeCommentOutput = await parseYouTubeComment({ youtubeUrl: actualYoutubeUrl, prioritizePinnedComments: prioritizePinned, scanDescription: false, scanComments: false, chapters: chapterText });
         allSongs = allSongs.concat(aiResult.songs.map(song => ({ ...song, imageUrl: song.imageUrl ?? undefined })));
       } catch (err: any) {
         errors.push('Chapters extraction failed: ' + (err.message || String(err)));
@@ -481,7 +446,7 @@ export default function Home() {
         if (!resp.ok) throw new Error(data.error || 'Failed to fetch description');
         if (data.description) {
           setParsingState("Processing Description with AI");
-          const aiResult: ParseYouTubeCommentOutput = await parseYouTubeComment({ youtubeUrl: actualYoutubeUrl, prioritizePinnedComments: prioritizePinned, scanDescription: true, description: data.description });
+          const aiResult: ParseYouTubeCommentOutput = await parseYouTubeComment({ youtubeUrl: actualYoutubeUrl, prioritizePinnedComments: prioritizePinned, scanDescription: true, scanComments: false, description: data.description });
           allSongs = allSongs.concat(aiResult.songs.map(song => ({ ...song, imageUrl: song.imageUrl ?? undefined })));
         } else {
           errors.push('No description found in this video.');
@@ -505,7 +470,7 @@ export default function Home() {
         if (!resp.ok) throw new Error(data.error || 'Failed to fetch comments');
         if (data.comments?.length) {
           setParsingState("Processing Comments with AI");
-          const aiResult: ParseYouTubeCommentOutput = await parseYouTubeComment({ youtubeUrl: actualYoutubeUrl, prioritizePinnedComments: prioritizePinned, scanDescription: false, comments: data.comments });
+          const aiResult: ParseYouTubeCommentOutput = await parseYouTubeComment({ youtubeUrl: actualYoutubeUrl, prioritizePinnedComments: prioritizePinned, scanDescription: false, scanComments: true, comments: data.comments });
           allSongs = allSongs.concat(aiResult.songs.map(song => ({ ...song, imageUrl: song.imageUrl ?? undefined })));
         } else {
           errors.push('No comments found with tracklist/songlist in this video.');
@@ -601,6 +566,21 @@ export default function Home() {
     });
   }, [failedAlbumArtSongs]);
 
+  // Example: Creating a Spotify playlist with the SDK
+  async function createSpotifyPlaylist(playlistName: string, trackUris: string[], isPublic: boolean = true) {
+    const user = await spotifySdk.currentUser.profile();
+    const playlist = await spotifySdk.playlists.createPlaylist(user.id, {
+      name: playlistName,
+      public: isPublic,
+      description: 'Created by TuneFlow. With <3 from Jon. https://tuneflow.chron0.tech',
+    });
+    await spotifySdk.playlists.addItemsToPlaylist(playlist.id, trackUris);
+    return {
+      playlistId: playlist.id,
+      playlistUrl: playlist.external_urls?.spotify,
+    };
+  }
+
   // --- UI Rendering ---
   // --- Hash helper for unique song keys ---
   function hashSong(song: Song): string {
@@ -661,7 +641,21 @@ export default function Home() {
                 {/* Spotify Connection Status */}
                 <div className="flex items-center space-x-2">
                   {spotifyIcon}
-                  <SpotifyStatusBanner spotifyConnected={spotifyConnected} loading={loading} onConnect={() => window.location.href='/api/spotify/login'} />
+                  <SpotifyStatusBanner
+                    spotifyConnected={hasAccessToken(session, 'spotify')}
+                    loading={loading}
+                    onConnect={() => {
+                      // Use the Spotify SDK login or NextAuth signIn('spotify')
+                      if (window.Spotify) {
+                        // If using SDK, trigger login
+                        // @ts-ignore
+                        window.Spotify.login && window.Spotify.login();
+                      } else {
+                        // Fallback: reload or show error
+                        window.location.reload();
+                      }
+                    }}
+                  />
                 </div>
                 {/* Apple Music Placeholder */}
                 <div className="flex items-center space-x-2">
@@ -787,7 +781,7 @@ export default function Home() {
                   setPlaylistName={setPlaylistName}
                   useAiPlaylistName={useAiPlaylistName}
                   setUseAiPlaylistName={setUseAiPlaylistName}
-                  connected={!!youtubeConnected}
+                  connected={true}
                   youtubeLink={youtubeLink}
                   onSuccess={(url) => {
                     toast({
@@ -819,7 +813,7 @@ export default function Home() {
                   setPlaylistName={setPlaylistName}
                   useAiPlaylistName={useAiPlaylistName}
                   setUseAiPlaylistName={setUseAiPlaylistName}
-                  connected={!!spotifyConnected}
+                  connected={true}
                   youtubeLink={youtubeLink}
                   onSuccess={(url) => {
                     setSpotifyPlaylistUrl(url);

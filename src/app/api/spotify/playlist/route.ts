@@ -3,12 +3,11 @@
 /**
  * API route to create a new Spotify playlist and add tracks to it for the authenticated user.
  *
- * - Expects userId, playlistName, and trackUris in the request body.
+ * - Expects playlistName, and trackUris in the request body.
  * - Creates a playlist and adds the provided tracks.
  * - Requires a valid Spotify access token in cookies.
  *
  * Request JSON:
- *   - userId: string (required)
  *   - playlistName: string (required)
  *   - trackUris: string[] (required)
  *   - public: boolean (optional, defaults to true)
@@ -16,12 +15,12 @@
  * Returns JSON with:
  *   - playlistId: string
  *   - playlistUrl: string
- *   - snapshot_id: string
  *   - error/details: Error information if the request fails
  */
 
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
+import { SpotifyApi, AccessToken } from '@spotify/web-api-ts-sdk';
 
 /**
  * Handles POST requests to the Spotify Playlist API route.
@@ -32,19 +31,23 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(req: NextRequest) {
   // Get Spotify access token from cookies
   const cookieStore = await cookies();
-  // Only use the Spotify access token for Spotify API calls
-  const accessToken = cookieStore.get('spotify_access_token')?.value;
+  // Retrieve the full AccessToken object as JSON from cookies
+  const accessTokenJson = cookieStore.get('spotify_access_token')?.value;
+  let accessToken: AccessToken | null = null;
+  try {
+    accessToken = accessTokenJson ? JSON.parse(accessTokenJson) : null;
+  } catch {
+    accessToken = null;
+  }
 
-  // Check if access token is present
-  if (!accessToken) {
-    return NextResponse.json({ error: 'No Spotify access token found. Please connect your Spotify account.' }, { status: 401 });
+  if (!accessToken || !accessToken.access_token) {
+    return NextResponse.json({ error: 'No valid Spotify access token found. Please connect your Spotify account.' }, { status: 401 });
   }
 
   // Parse request body
-  let userId, playlistName, trackUris, isPublic;
+  let playlistName, trackUris, isPublic;
   try {
     const body = await req.json();
-    userId = body.userId;
     playlistName = body.playlistName;
     trackUris = body.trackUris;
     isPublic = typeof body.public === 'boolean' ? body.public : true;
@@ -53,56 +56,32 @@ export async function POST(req: NextRequest) {
   }
 
   // Validate request body
-  if (!userId || typeof userId !== 'string' || !playlistName || typeof playlistName !== 'string' || !trackUris || !Array.isArray(trackUris) || trackUris.length === 0) {
-    return NextResponse.json({ error: 'Missing or invalid userId, playlistName, or trackUris' }, { status: 400 });
+  if (!playlistName || typeof playlistName !== 'string' || !trackUris || !Array.isArray(trackUris) || trackUris.length === 0) {
+    return NextResponse.json({ error: 'Missing or invalid playlistName or trackUris' }, { status: 400 });
   }
 
-  // --- Create Playlist ---
+  try {
+    // Initialize Spotify SDK with AccessToken object
+    const sdk = SpotifyApi.withAccessToken('client-id', accessToken);
 
-  // Construct create playlist URL
-  const createPlaylistUrl = `https://api.spotify.com/v1/users/${userId}/playlists`;
+    // Get current user's Spotify profile to obtain user ID
+    const user = await sdk.currentUser.profile();
 
-  // Create playlist request
-  const createResponse = await fetch(createPlaylistUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ name: playlistName, public: isPublic, description: 'Created by TuneFlow. With <3 from Jon. https://tuneflow.chron0.tech' }),
-  });
+    // Create playlist for current user
+    const playlist = await sdk.playlists.createPlaylist(user.id, {
+      name: playlistName,
+      public: isPublic,
+      description: 'Created by TuneFlow. With <3 from Jon. https://tuneflow.chron0.tech',
+    });
 
-  // Parse create playlist response
-  const playlistData = await createResponse.json();
+    // Add tracks to playlist (no snapshot_id returned)
+    await sdk.playlists.addItemsToPlaylist(playlist.id, trackUris);
 
-  // Check if create playlist request failed
-  if (!createResponse.ok) {
-    return NextResponse.json({ error: playlistData.error?.message || 'Failed to create playlist', details: playlistData }, { status: createResponse.status });
+    return NextResponse.json({
+      playlistId: playlist.id,
+      playlistUrl: playlist.external_urls?.spotify,
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Spotify API error', details: error }, { status: 500 });
   }
-
-  // --- Add Tracks ---
-
-  // Construct add tracks URL
-  const addTracksUrl = `https://api.spotify.com/v1/playlists/${playlistData.id}/tracks`;
-
-  // Add tracks request
-  const addResponse = await fetch(addTracksUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ uris: trackUris }),
-  });
-
-  // Parse add tracks response
-  const addData = await addResponse.json();
-
-  // Check if add tracks request failed
-  if (!addResponse.ok) {
-    return NextResponse.json({ error: addData.error?.message || 'Failed to add tracks', details: addData }, { status: addResponse.status });
-  }
-
-  // Return playlist data
-  return NextResponse.json({ playlistId: playlistData.id, playlistUrl: playlistData.external_urls?.spotify, snapshot_id: addData.snapshot_id });
 }

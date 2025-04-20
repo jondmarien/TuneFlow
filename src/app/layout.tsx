@@ -13,6 +13,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { DarkReaderFixWrapper } from '@/components/DarkReaderFixWrapper';
 import SessionProviderWrapper from "./SessionProviderWrapper";
 import ThemeToggle from '../components/ThemeToggle';
+import { ClientGlobalErrorBoundary } from '@/components/ClientGlobalErrorBoundary';
 
 // --- Font Setup ---
 const geistSans = Geist({
@@ -47,7 +48,9 @@ export default function RootLayout({
         <DarkReaderFixWrapper />
         <ThemeToggle />
         <SessionProviderWrapper>
-          {children}
+          <ClientGlobalErrorBoundary>
+            {children}
+          </ClientGlobalErrorBoundary>
         </SessionProviderWrapper>
         {/* Global toast notifications */}
         <Toaster /> 
