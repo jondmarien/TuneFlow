@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 
 // Next.js authentication/session
 import { useSession } from "next-auth/react";
+import { signIn, signOut } from "next-auth/react";
 
 // Project hooks
 import { useToast } from "@/hooks/use-toast";
@@ -644,16 +645,15 @@ export default function Home() {
                   <SpotifyStatusBanner
                     spotifyConnected={hasAccessToken(session, 'spotify')}
                     loading={loading}
-                    onConnect={() => {
-                      // Use the Spotify SDK login or NextAuth signIn('spotify')
-                      if (window.Spotify) {
-                        // If using SDK, trigger login
-                        // @ts-ignore
-                        window.Spotify.login && window.Spotify.login();
-                      } else {
-                        // Fallback: reload or show error
-                        window.location.reload();
-                      }
+                    onConnect={() => signIn('spotify')}
+                    onDisconnect={() => {
+                      // Always clear SDK tokens on disconnect
+                      try {
+                        localStorage.removeItem('spotify-sdk:access_token');
+                        localStorage.removeItem('spotify-sdk:refresh_token');
+                        localStorage.removeItem('spotify-sdk:expires_at');
+                      } catch {}
+                      signOut({ callbackUrl: '/' });
                     }}
                   />
                 </div>

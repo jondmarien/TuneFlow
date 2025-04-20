@@ -9,21 +9,28 @@ import { signIn, signOut } from "next-auth/react";
  *   - spotifyConnected: boolean|null
  *   - loading: boolean
  *   - onConnect: () => void
+ *   - onDisconnect?: () => void
  */
 export function SpotifyStatusBanner({
   spotifyConnected,
   loading,
   onConnect,
+  onDisconnect,
 }: {
   spotifyConnected: boolean | null;
   loading: boolean;
   onConnect: () => void;
+  onDisconnect?: () => void;
 }) {
   const [disconnecting, setDisconnecting] = useState(false);
 
   const handleDisconnect = async () => {
     setDisconnecting(true);
-    await signOut({ callbackUrl: '/' });
+    if (onDisconnect) {
+      await onDisconnect();
+    } else {
+      await signOut({ callbackUrl: '/' });
+    }
     setDisconnecting(false);
   };
 
