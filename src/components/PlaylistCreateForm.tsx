@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PlaylistNameForm } from "@/components/PlaylistNameForm";
 import { YoutubeIcon, SpotifyIcon } from "@/components/CustomIcons";
 import { FailedSpotifySongsList } from "@/components/FailedSpotifySongsList";
-import { spotifySdk, robustSpotifyTrackSearch, createSpotifyPlaylist } from '@/services/spotify';
+import { getSpotifySdk, robustSpotifyTrackSearch, createSpotifyPlaylist } from '@/services/spotify';
 
 // Song type definition
 export type Song = {
@@ -29,6 +29,9 @@ interface PlaylistCreateFormProps {
   onError?: (error: string) => void;
   youtubeLink?: string;
   failedAlbumArtSongs: Song[];
+  spotifyAccessToken: string;
+  spotifyRefreshToken?: string;
+  spotifyExpiresAt?: number;
 }
 
 export function PlaylistCreateForm({
@@ -43,6 +46,9 @@ export function PlaylistCreateForm({
   onError,
   youtubeLink = "",
   failedAlbumArtSongs,
+  spotifyAccessToken,
+  spotifyRefreshToken,
+  spotifyExpiresAt,
 }: PlaylistCreateFormProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -135,7 +141,8 @@ export function PlaylistCreateForm({
     try {
       let playlistUrl = '';
       if (service === "spotify") {
-        playlistUrl = await createSpotifyPlaylist(songs, playlistName, privacy === 'public');
+        const spotifySdk = getSpotifySdk(spotifyAccessToken, spotifyRefreshToken, spotifyExpiresAt);
+        playlistUrl = await createSpotifyPlaylist(songs, playlistName, spotifyAccessToken, spotifyRefreshToken, spotifyExpiresAt, privacy === 'public');
       } else {
         // --- Get videoIds from songs ---
         const videoIds = songs.map(song => song.videoId).filter((id): id is string => Boolean(id));

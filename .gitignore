@@ -50,3 +50,6 @@ next-env.d.ts
 
 # old page.tsx file
 page.tsx.old
+
+# windsurf rules
+.windsurfrules
