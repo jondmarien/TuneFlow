@@ -51,3 +51,7 @@ next-env.d.ts
 
 # old page.tsx file
 page.tsx.old
+
+# windsurf deployment
+netlify.toml
+windsurf_deployment.yaml
