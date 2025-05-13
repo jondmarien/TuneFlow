@@ -122,6 +122,7 @@ export default function Home() {
   const [spotifySongSearches, setSpotifySongSearches] = useState<{ song: Song; status: 'pending' | 'searching' | 'found' | 'not_found' }[]>([]);
   const [currentSpotifySearchSong, setCurrentSpotifySearchSong] = useState<Song | null>(null);
   const [spotifyPlaylistUrl, setSpotifyPlaylistUrl] = useState<string | null>(null);
+  const [youtubePlaylistUrl, setYoutubePlaylistUrl] = useState<string | null>(null);
   const [spotifyAllSongsFound, setSpotifyAllSongsFound] = useState<boolean | null>(null);
   const [commentsPage, setCommentsPage] = useState(1);
   const [showMoreCommentsPrompt, setShowMoreCommentsPrompt] = useState(false);
@@ -142,6 +143,21 @@ export default function Home() {
     if (!mounted) return;
     localStorage.setItem('selectedService', selectedService);
   }, [selectedService, mounted]);
+
+  // --- Error Handling State for Debug Bar ---
+  const [debugError, setDebugError] = useState<string | null>(null);
+
+  // Helper: Show error in debug bar and toast
+  function showDebugError(err: string) {
+    setDebugError(err);
+    toast({
+      title: 'Critical Error',
+      description: err,
+      variant: 'destructive',
+      position: 'top-center',
+      duration: 10000
+    });
+  }
 
   // --- Effects ---
 
@@ -637,6 +653,27 @@ export default function Home() {
 
   return (
     <>
+      {/* Debug Error Bar */}
+      {debugError && (
+        <div style={{
+          width: '100vw',
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          zIndex: 1000,
+          background: '#dc2626',
+          color: 'white',
+          fontWeight: 'bold',
+          padding: '12px 0',
+          textAlign: 'center',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.12)'
+        }}>
+          {debugError} <br />
+          <span style={{ fontWeight: 'normal', fontSize: '0.95em' }}>
+            Please screenshot this error and send it to the developer for investigation.
+          </span>
+        </div>
+      )}
       {!mounted ? null : (
         <div className="flex flex-col items-center justify-start min-h-screen p-4 bg-background text-foreground">
           <Card className="mb-4 relative">
@@ -790,6 +827,7 @@ export default function Home() {
                   connected={!!youtubeConnected}
                   youtubeLink={youtubeLink}
                   onSuccess={(url) => {
+                    setYoutubePlaylistUrl(url);
                     toast({
                       title: 'YouTube Playlist Created!',
                       description: (
@@ -807,9 +845,22 @@ export default function Home() {
                       position: 'top-right',
                     });
                   }}
-                  onError={(err) => toast({ title: 'YouTube Playlist Error', description: err, variant: 'destructive', position: 'top-left' })}
+                  onError={showDebugError}
                   failedAlbumArtSongs={failedAlbumArtSongs}
                 />
+                {/* Render link to YouTube playlist after successful creation */}
+                {selectedService === 'youtube' && youtubePlaylistUrl && (
+                  <div className="mt-4 text-center">
+                    <a
+                      href={youtubePlaylistUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: '#ef4444', fontWeight: 'bold', textDecoration: 'underline', fontSize: '1.1rem' }}
+                    >
+                      Open Playlist
+                    </a>
+                  </div>
+                )}
               </TabsContent>
               <TabsContent value="spotify">
                 <PlaylistCreateForm
@@ -841,7 +892,7 @@ export default function Home() {
                       position: 'top-right',
                     });
                   }}
-                  onError={(err) => toast({ title: 'Spotify Playlist Error', description: err, variant: 'destructive', position: 'top-left' })}
+                  onError={showDebugError}
                   failedAlbumArtSongs={failedAlbumArtSongs}
                 />
                 {/* Render link to Spotify playlist after successful creation */}
