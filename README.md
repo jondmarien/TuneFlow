@@ -2,6 +2,8 @@
 
 TuneFlow is an AI-powered playlist generator that seamlessly integrates YouTube and Spotify to help you discover, parse, and organize music from videos and comments into personalized playlists. Built with Next.js, Genkit, and a modern UI, TuneFlow is your all-in-one music companion! 🚀
 
+[![Netlify Status](https://api.netlify.com/api/v1/badges/e79401ae-cbf9-426a-b281-f47ce099f336/deploy-status)](https://app.netlify.com/sites/tuneflow-app-aiihz/deploys)
+
 ## App Screenshots 📸✨
 
 Here are screenshots of the TuneFlow app in both dark and light mode—see the magic in action! 🌙☀️
