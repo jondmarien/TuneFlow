@@ -10,9 +10,9 @@ import type {Metadata} from 'next';
 import {Geist, Geist_Mono} from 'next/font/google';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"; 
-import { DarkReaderFixWrapper } from '@/components/DarkReaderFixWrapper';
+import { DarkReaderFixWrapper } from '@/components/shared/DarkReaderFixWrapper';
 import SessionProviderWrapper from "./SessionProviderWrapper";
-import ThemeToggle from '../components/ThemeToggle';
+import ThemeToggle from '../components/shared/ThemeToggle';
 
 // --- Font Setup ---
 const geistSans = Geist({

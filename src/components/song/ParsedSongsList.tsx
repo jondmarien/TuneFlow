@@ -1,7 +1,7 @@
 import React from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { SongList } from "@/components/SongList";
+import { SongList } from "@/components/song/SongList";
 import type { Song } from "@/types/tuneflow";
 import { hashSong } from "@/utils/formatters";
 

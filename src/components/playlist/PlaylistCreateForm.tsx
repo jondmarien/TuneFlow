@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PlaylistNameForm } from "@/components/PlaylistNameForm";
-import { YoutubeIcon, SpotifyIcon } from "@/components/CustomIcons";
-import { FailedSpotifySongsList } from "@/components/FailedSpotifySongsList";
+import { PlaylistNameForm } from "@/components/playlist/PlaylistNameForm";
+import { Icons as IconComponent, Icons } from "@/components/shared/icons";
+import { FailedSpotifySongsList } from "@/components/song/failed/FailedSpotifySongsList";
 
 // Song type definition
 export type Song = {
@@ -418,9 +418,9 @@ export function PlaylistCreateForm({
       <CardHeader>
         <CardTitle className="text-lg font-semibold flex justify-center items-center text-center w-full">
           {service === "spotify" ? (
-            <span className="flex items-center"><SpotifyIcon /> Spotify Playlist</span>
+            <span className="flex items-center"><Icons.spotify /> Spotify Playlist</span>
           ) : (
-            <span className="flex items-center"><YoutubeIcon /> YouTube Playlist</span>
+            <span className="flex items-center"><Icons.youtube /> YouTube Playlist</span>
           )}
         </CardTitle>
       </CardHeader>

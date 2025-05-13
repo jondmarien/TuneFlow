@@ -39,6 +39,9 @@ export function PlaylistNameForm({
         disabled
       />
       <div className="flex items-center space-x-2">
+      <Label htmlFor="ai-playlist-name" className="text-sm text-muted-foreground">
+        Use AI to generate playlist name (DISABLED)
+      </Label>
         <input
           id="ai-playlist-name"
           type="checkbox"
@@ -46,9 +49,6 @@ export function PlaylistNameForm({
           onChange={() => {}}
           disabled
         />
-        <Label htmlFor="ai-playlist-name" className="text-sm text-muted-foreground">
-          Use AI to generate playlist name (DISABLED)
-        </Label>
       </div>
     </div>
   );

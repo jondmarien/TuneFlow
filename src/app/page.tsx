@@ -21,16 +21,16 @@ import { useToast } from "@/hooks/use-toast";
 // Project UI components
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ConfirmationDialog } from "@/components/ConfirmationDialog";
-import { FailedAlbumArtList } from "@/components/FailedAlbumArtList";
-import { Icons } from "@/components/icons";
-import { PaginationControls } from "@/components/PaginationControls";
-import { ParsedSongsList } from "@/components/ParsedSongsList";
-import { PlaylistCreateForm } from "@/components/PlaylistCreateForm";
-import { SpotifyStatusBanner } from "@/components/SpotifyStatusBanner";
+import { ConfirmationDialog } from "@/components/shared/ConfirmationDialog";
+import { FailedAlbumArtList } from "@/components/song/failed/FailedAlbumArtList";
+import { Icons } from "@/components/shared/icons";
+import { PaginationControls } from "@/components/playlist/PaginationControls";
+import { ParsedSongsList } from "@/components/song/ParsedSongsList";
+import { PlaylistCreateForm } from "@/components/playlist/PlaylistCreateForm";
+import { SpotifyStatusBanner } from "@/components/spotify/SpotifyStatusBanner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { YoutubeStatusBanner } from "@/components/YoutubeStatusBanner";
-import { YouTubeInputForm } from "@/components/YouTubeInputForm";
+import { YoutubeStatusBanner } from "@/components/youtube/YoutubeStatusBanner";
+import { YouTubeInputForm } from "@/components/youtube/YouTubeInputForm";
 
 // Utilities and type guards
 import { hasAccessToken } from "@/utils/typeGuards";
