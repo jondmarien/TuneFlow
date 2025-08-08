@@ -716,7 +716,7 @@ export default function Home() {
               {/* Grouped Section: If no songs, center YouTubeInputForm. If songs, show all three in a row */}
               {songs.length === 0 && !hasFailedAlbumArt ? (
                 <div className="flex-1 flex flex-col items-center justify-center">
-                  <Card className="w-full max-w-md h-full min-h-[440px] p-4 rounded-lg shadow-md bg-secondary flex flex-col justify-center">
+                  <Card className="w-full max-w-md h-full min-h-[440px] p-6 rounded-lg shadow-lg bg-secondary flex flex-col justify-center">
                     <CardHeader>
                       <CardTitle className="text-lg font-semibold flex justify-center items-center text-center w-full">
                         <span role="img" aria-label="music">🎵</span>
@@ -749,7 +749,7 @@ export default function Home() {
                   className={`flex w-full ${hasFailedAlbumArt ? 'max-w-6xl justify-center items-stretch gap-8' : 'max-w-3xl justify-center items-stretch gap-8'} mt-4`}
                 >
                   <div className="flex-1 flex flex-col items-center justify-center">
-                    <Card className="w-full max-w-md h-full min-h-[440px] p-4 rounded-lg shadow-md bg-secondary flex flex-col">
+                    <Card className="w-full max-w-md h-full min-h-[440px] p-6 rounded-lg shadow-lg bg-secondary flex flex-col">
                       <CardHeader>
                         <CardTitle className="text-lg font-semibold flex justify-center items-center text-center w-full">
                           <span role="img" aria-label="music">🎵</span>

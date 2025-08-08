@@ -128,7 +128,7 @@ export function YouTubeInputForm({
       <Button
         onClick={onParse}
         disabled={loading || !youtubeLink}
-        className="w-full rounded-md bg-blue-700 hover:bg-blue-400 text-white font-semibold shadow disabled:cursor-not-allowed transition-colors duration-150"
+        className="w-full rounded-md font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-px transition-all duration-150"
       >
         {loading ? 'Parsing...' : 'Parse YouTube Video Information'}
       </Button>
