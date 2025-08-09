@@ -14,7 +14,29 @@ const BATCH_SIZE = 5; // How many comments to batch per AI call
 import {ai} from '@/ai/ai-instance';
 import {z} from 'genkit';
 import { getTrackAlbumArt } from '@/services/spotify-service';
-import { redis } from '@/utils/redis';
+import { getRedis } from '@/utils/redis';
+
+// --- Redis Helper Functions ---
+async function getCachedData(key: string): Promise<string | null> {
+  const redis = getRedis();
+  if (!redis) return null;
+  try {
+    return await redis.get(key);
+  } catch (error) {
+    console.error('Redis get error:', error);
+    return null;
+  }
+}
+
+async function setCachedData(key: string, value: string, expirySeconds: number = 60 * 60 * 24): Promise<void> {
+  const redis = getRedis();
+  if (!redis) return;
+  try {
+    await redis.set(key, value, 'EX', expirySeconds);
+  } catch (error) {
+    console.error('Redis set error:', error);
+  }
+}
 
 // --- Input and Output Schemas ---
 const ParseYouTubeCommentInputSchema = z.object({
@@ -147,7 +169,7 @@ const parseYouTubeCommentFlow = ai.defineFlow<
       const truncatedChapters = logAndTruncate(cleanedChapters, 'Chapters');
       const hash = 'chapters:' + truncatedChapters;
       let chapterSongs: { title: string; artist: string }[] = [];
-      const cached = await redis.get(hash);
+      const cached = await getCachedData(hash);
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
@@ -162,7 +184,7 @@ const parseYouTubeCommentFlow = ai.defineFlow<
           const result = await parseCommentPrompt({ commentText: truncatedChapters });
           if (result.output?.songs && result.output.songs.length > 0) {
             chapterSongs = result.output.songs;
-            await redis.set(hash, JSON.stringify({ songs: chapterSongs }), 'EX', 60 * 60 * 24);
+            await setCachedData(hash, JSON.stringify({ songs: chapterSongs }));
           }
         } catch (error) {
           console.error(`[parseYouTubeCommentFlow] Error processing chapters:`, error);
@@ -171,10 +193,10 @@ const parseYouTubeCommentFlow = ai.defineFlow<
       // Return early if chapters were processed
       const songsWithImages = await Promise.all(chapterSongs.map(async (song: { title: string; artist: string }) => {
         const key = `albumArt:${song.title}|||${song.artist}`;
-        let imageUrl: string | null = await redis.get(key);
+        let imageUrl: string | null = await getCachedData(key);
         if (!imageUrl) {
           getTrackAlbumArt(song.title, song.artist).then(url => {
-            if (url) redis.set(key, url, 'EX', 60 * 60 * 24);
+            if (url) setCachedData(key, url);
           });
         }
         return { ...song, imageUrl: imageUrl ?? undefined };
@@ -317,7 +339,7 @@ const parseYouTubeCommentFlow = ai.defineFlow<
       const joined = comments.map((c, i) => `Comment ${i + 1}:\n${c}`).join('\n---\n');
       const truncated = logAndTruncate(joined, `Batch of ${comments.length} comments`);
       const hash = truncated; // Simple cache key (could hash for more robustness)
-      const cached = await redis.get(hash);
+      const cached = await getCachedData(hash);
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
@@ -340,10 +362,10 @@ const parseYouTubeCommentFlow = ai.defineFlow<
       aiPromptTotalTime += promptDuration;
       console.log(`[parseYouTubeCommentFlow] AI prompt duration for batch: ${promptDuration} ms`);
       if (result.output?.songs && result.output.songs.length > 0) {
-        await redis.set(hash, JSON.stringify({ songs: result.output.songs }), 'EX', 60 * 60 * 24);
+        await setCachedData(hash, JSON.stringify({ songs: result.output.songs }));
         return result.output.songs;
       }
-      await redis.set(hash, JSON.stringify({ songs: [] }), 'EX', 60 * 60 * 24);
+      await setCachedData(hash, JSON.stringify({ songs: [] }));
       return [];
     }
 
@@ -371,7 +393,7 @@ const parseYouTubeCommentFlow = ai.defineFlow<
         const truncatedDesc = logAndTruncate(cleanedDesc, 'Description');
         const hash = truncatedDesc;
         let descSongs: { title: string; artist: string }[] = [];
-        const cached = await redis.get(hash);
+        const cached = await getCachedData(hash);
         if (cached) {
           try {
             const parsed = JSON.parse(cached);
@@ -388,7 +410,7 @@ const parseYouTubeCommentFlow = ai.defineFlow<
           aiPromptTotalTime += promptDuration;
           console.log(`[parseYouTubeCommentFlow] AI prompt duration for description: ${promptDuration} ms`);
           descSongs = result.output?.songs || [];
-          await redis.set(hash, JSON.stringify({ songs: descSongs }), 'EX', 60 * 60 * 24);
+          await setCachedData(hash, JSON.stringify({ songs: descSongs }));
         }
         if (descSongs.length > 0) {
           allSongs = allSongs.concat(descSongs);
@@ -411,12 +433,12 @@ const parseYouTubeCommentFlow = ai.defineFlow<
     // Instead of waiting for album art, return songs with imageUrl: null, and trigger background fetch (pseudo, see below)
     const songsWithImages = await Promise.all(uniqueSongs.map(async (song: { title: string; artist: string }) => {
       const key = `albumArt:${song.title}|||${song.artist}`;
-      let imageUrl: string | null = await redis.get(key);
+      let imageUrl: string | null = await getCachedData(key);
       if (!imageUrl) {
         // Fire and forget async fetch
         getTrackAlbumArt(song.title, song.artist).then(url => {
           if (url) {
-            redis.set(key, url, 'EX', 60 * 60 * 24); // Cache for 24 hours
+            setCachedData(key, url);
           }
         });
       }
