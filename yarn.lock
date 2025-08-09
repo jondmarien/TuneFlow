@@ -5037,18 +5037,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"gaxios@npm:^6.0.0, gaxios@npm:^6.0.3, gaxios@npm:^6.1.1":
-  version: 6.7.1
-  resolution: "gaxios@npm:6.7.1"
+"gaxios@npm:^7.1.1":
+  version: 7.1.1
+  resolution: "gaxios@npm:7.1.1"
   dependencies:
     extend: "npm:^3.0.2"
     https-proxy-agent: "npm:^7.0.1"
-    is-stream: "npm:^2.0.0"
-    node-fetch: "npm:^2.6.9"
-    uuid: "npm:^9.0.1"
-  checksum: 10c0/53e92088470661c5bc493a1de29d05aff58b1f0009ec5e7903f730f892c3642a93e264e61904383741ccbab1ce6e519f12a985bba91e13527678b32ee6d7d3fd
+    node-fetch: "npm:^3.3.2"
+  checksum: 10c0/f58dea117f67a3d8b46391db955eb061a3e408464c9260d5d24a67a07a8da673ca0382a096c7c01ae0e7db4c74ce6453109933d8dbfa4c02b5bb93f7d79e726d
   languageName: node
   linkType: hard
+
 
 "gcp-metadata@npm:^6.1.0":
   version: 6.1.1
@@ -5058,6 +5057,13 @@ __metadata:
     google-logging-utils: "npm:^0.0.2"
     json-bigint: "npm:^1.0.0"
   checksum: 10c0/71f6ad4800aa622c246ceec3955014c0c78cdcfe025971f9558b9379f4019f5e65772763428ee8c3244fa81b8631977316eaa71a823493f82e5c44d7259ffac8
+  languageName: node
+  linkType: hard
+
+"genkit-ai@npm:^0.0.1":
+  version: 0.0.1
+  resolution: "genkit-ai@npm:0.0.1"
+  checksum: 10c0/27ffad64ecf449f36821ec388d714de3d8df5c75b46c6390ccc42851e4367497d73fc287dbdbed77cfcd606a2b493768a335bf9c47e7bd4e2b3cc195cc668d82
   languageName: node
   linkType: hard
 
@@ -6497,7 +6503,9 @@ __metadata:
     clsx: "npm:^2.1.1"
     date-fns: "npm:^3.6.0"
     firebase: "npm:^11.3.0"
+    gaxios: "npm:^7.1.1"
     genkit: "npm:^1.0.4"
+    genkit-ai: "npm:^0.0.1"
     genkit-cli: "npm:^1.0.4"
     googleapis: "npm:^148.0.0"
     ioredis: "npm:^5.6.1"

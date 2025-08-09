@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { redis } from '@/utils/redis';
+import { getRedis } from '@/utils/redis';
 
 /**
  * POST /api/update-parsed-songs
@@ -14,6 +14,10 @@ export async function POST(req: NextRequest) {
     }
     // Standardized cache key for parsed songs
     const cacheKey = `parsed_songs:${videoId}`;
+    const redis = getRedis();
+    if (!redis) {
+      return NextResponse.json({ error: 'Redis not available' }, { status: 503 });
+    }
     await redis.set(cacheKey, JSON.stringify(songs), 'EX', 60 * 60 * 24); // cache for 24 hours
     return NextResponse.json({ message: 'Parsed songs cache updated successfully.' });
   } catch (error: any) {

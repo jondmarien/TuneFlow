@@ -18,7 +18,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getTrackAlbumArt } from '@/services/spotify-service';
-import { redis } from '@/utils/redis';
+import { getRedis } from '@/utils/redis';
 import { withRequestContext } from '../_logcontext';
 
 /**
@@ -45,41 +45,57 @@ export async function GET(req: NextRequest) {
 
     // --- Check Redis Cache ---
 
+    const redis = getRedis();
     const key = `albumArt:${title}|||${artist}`;
     let imageUrl: string | null = null;
-    try {
-      imageUrl = await redis.get(key);
-    } catch (err) {
-      console.error('[album-art] Redis error:', err);
-      return NextResponse.json({ imageUrl: null, status: 'redis_error' });
-    }
+    
+    if (redis) {
+      try {
+        imageUrl = await redis.get(key);
+      } catch (err) {
+        console.error('[album-art] Redis error:', err);
+        return NextResponse.json({ imageUrl: null, status: 'redis_error' });
+      }
 
-    // --- Return Cached Result ---
+      // --- Return Cached Result ---
 
-    if (imageUrl) {
-      return NextResponse.json({ imageUrl, status: 'ready' });
-    }
+      if (imageUrl) {
+        return NextResponse.json({ imageUrl, status: 'ready' });
+      }
 
-    // --- Deduplication: Check Fetching Lock ---
+      // --- Deduplication: Check Fetching Lock ---
 
-    const fetchingKey = `albumArt:fetching:${title}|||${artist}`;
-    let isFetching = false;
-    try {
-      isFetching = !!(await redis.get(fetchingKey));
-    } catch (err) {
-      console.error('[album-art] Redis error checking fetching lock:', err);
-    }
+      const fetchingKey = `albumArt:fetching:${title}|||${artist}`;
+      let isFetching = false;
+      try {
+        isFetching = !!(await redis.get(fetchingKey));
+      } catch (err) {
+        console.error('[album-art] Redis error checking fetching lock:', err);
+      }
 
-    // --- Trigger Background Fetch ---
+      // --- Trigger Background Fetch ---
 
-    if (!isFetching) {
-      await redis.set(fetchingKey, '1', 'EX', 30); // lock for 30 seconds
-      getTrackAlbumArt(title, artist).then(url => {
-        if (url) {
-          redis.set(key, url, 'EX', 60 * 60 * 24); // Cache for 24 hours
+      if (!isFetching) {
+        await redis.set(fetchingKey, '1', 'EX', 30); // lock for 30 seconds
+        getTrackAlbumArt(title, artist).then(url => {
+          if (url && redis) {
+            redis.set(key, url, 'EX', 60 * 60 * 24); // Cache for 24 hours
+          }
+          if (redis) {
+            redis.del(fetchingKey);
+          }
+        });
+      }
+    } else {
+      // No Redis available, fetch directly
+      try {
+        imageUrl = await getTrackAlbumArt(title, artist);
+        if (imageUrl) {
+          return NextResponse.json({ imageUrl, status: 'ready' });
         }
-        redis.del(fetchingKey);
-      });
+      } catch (err) {
+        console.error('[album-art] Error fetching album art:', err);
+      }
     }
 
     // --- Return Pending Response ---

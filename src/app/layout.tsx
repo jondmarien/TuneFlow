@@ -7,7 +7,7 @@
  * @param children - The page content to render inside the layout.
  */
 import type {Metadata} from 'next';
-import {Geist, Geist_Mono} from 'next/font/google';
+import { Inter } from 'next/font/google';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"; 
 import { DarkReaderFixWrapper } from '@/components/shared/DarkReaderFixWrapper';
@@ -15,14 +15,9 @@ import SessionProviderWrapper from "./SessionProviderWrapper";
 import ThemeToggle from '../components/shared/ThemeToggle';
 
 // --- Font Setup ---
-const geistSans = Geist({
-  variable: '--font-geist-sans',
+const inter = Inter({
   subsets: ['latin'],
-});
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
+  variable: '--font-sans',
 });
 
 // --- Metadata ---
@@ -42,7 +37,7 @@ export default function RootLayout({
       <head>
         <meta name="apple-mobile-web-app-title" content="TuneFlow" />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${inter.variable} font-sans antialiased`}>
         {/* Apply Dark Reader fix to avoid hydration issues */}
         <DarkReaderFixWrapper />
         <ThemeToggle />

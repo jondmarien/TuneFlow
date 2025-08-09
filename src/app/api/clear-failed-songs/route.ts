@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { redis } from '@/utils/redis';
+import { getRedis } from '@/utils/redis';
 
 /**
  * POST /api/clear-failed-songs
@@ -13,6 +13,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing cacheKey in request body.' }, { status: 400 });
     }
     // Delete the cache entry in Redis
+    const redis = getRedis();
+    if (!redis) {
+      return NextResponse.json({ error: 'Redis not available' }, { status: 503 });
+    }
     const result = await redis.del(cacheKey);
     if (result === 0) {
       return NextResponse.json({ message: 'No cache entry found for the provided key.' }, { status: 404 });
